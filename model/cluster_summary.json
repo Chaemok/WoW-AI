@@ -1,0 +1,530 @@
+[
+  {
+    "cluster_id": 0,
+    "cluster_name": "장보기·의류형",
+    "cluster_signature": "외식(19%) · 음/식료품소매(17%)",
+    "cluster_description": "음/식료품소매를 중심으로 의복/의류와 의약/의료품 지출이 함께 나타나는 생활구매형 유형",
+    "profile_count": 2,
+    "profile_share_pct": 1.52,
+    "top_features": [
+      {
+        "feature": "비율_외식",
+        "category": "외식",
+        "cluster_pct": 19.09,
+        "overall_pct": 17.53,
+        "peer_avg_pct": 13.02,
+        "peer_max_pct": 26.12,
+        "lift_vs_overall": 1.09,
+        "gap_vs_overall_pctp": 1.56,
+        "gap_vs_peer_max_pctp": -7.04
+      },
+      {
+        "feature": "비율_음/식료품소매",
+        "category": "음/식료품소매",
+        "cluster_pct": 17.27,
+        "overall_pct": 8.98,
+        "peer_avg_pct": 7.83,
+        "peer_max_pct": 15.89,
+        "lift_vs_overall": 1.92,
+        "gap_vs_overall_pctp": 8.29,
+        "gap_vs_peer_max_pctp": 1.38
+      },
+      {
+        "feature": "비율_의복/의류",
+        "category": "의복/의류",
+        "cluster_pct": 12.72,
+        "overall_pct": 3.09,
+        "peer_avg_pct": 3.13,
+        "peer_max_pct": 5.24,
+        "lift_vs_overall": 4.12,
+        "gap_vs_overall_pctp": 9.63,
+        "gap_vs_peer_max_pctp": 7.49
+      },
+      {
+        "feature": "비율_의약/의료품",
+        "category": "의약/의료품",
+        "cluster_pct": 12.42,
+        "overall_pct": 5.49,
+        "peer_avg_pct": 3.85,
+        "peer_max_pct": 11.18,
+        "lift_vs_overall": 2.26,
+        "gap_vs_overall_pctp": 6.93,
+        "gap_vs_peer_max_pctp": 1.24
+      },
+      {
+        "feature": "비율_자동차/유지비",
+        "category": "자동차/유지비",
+        "cluster_pct": 7.14,
+        "overall_pct": 15.67,
+        "peer_avg_pct": 9.3,
+        "peer_max_pct": 22.8,
+        "lift_vs_overall": 0.46,
+        "gap_vs_overall_pctp": -8.53,
+        "gap_vs_peer_max_pctp": -15.66
+      }
+    ],
+    "headline": "외식 19.1% (전체 평균 17.5%, 1.09배, 타 클러스터 최고 대비 -7.0%p) / 음/식료품소매 17.3% (전체 평균 9.0%, 1.92배, 타 클러스터 최고 대비 +1.4%p)"
+  },
+  {
+    "cluster_id": 1,
+    "cluster_name": "사무·서적형",
+    "cluster_signature": "사무/교육용품(22%) · 분식(18%)",
+    "cluster_description": "사무/교육용품과 서적/도서 비중이 매우 높고 분식 소비가 함께 나타나는 학습 집중형 유형",
+    "profile_count": 9,
+    "profile_share_pct": 6.82,
+    "top_features": [
+      {
+        "feature": "비율_사무/교육용품",
+        "category": "사무/교육용품",
+        "cluster_pct": 21.84,
+        "overall_pct": 1.67,
+        "peer_avg_pct": 0.56,
+        "peer_max_pct": 3.11,
+        "lift_vs_overall": 13.05,
+        "gap_vs_overall_pctp": 20.16,
+        "gap_vs_peer_max_pctp": 18.73
+      },
+      {
+        "feature": "비율_분식",
+        "category": "분식",
+        "cluster_pct": 18.21,
+        "overall_pct": 3.09,
+        "peer_avg_pct": 3.57,
+        "peer_max_pct": 9.4,
+        "lift_vs_overall": 5.9,
+        "gap_vs_overall_pctp": 15.12,
+        "gap_vs_peer_max_pctp": 8.8
+      },
+      {
+        "feature": "비율_서적/도서",
+        "category": "서적/도서",
+        "cluster_pct": 11.23,
+        "overall_pct": 1.18,
+        "peer_avg_pct": 0.28,
+        "peer_max_pct": 1.28,
+        "lift_vs_overall": 9.49,
+        "gap_vs_overall_pctp": 10.04,
+        "gap_vs_peer_max_pctp": 9.94
+      },
+      {
+        "feature": "비율_커피/음료",
+        "category": "커피/음료",
+        "cluster_pct": 8.9,
+        "overall_pct": 4.38,
+        "peer_avg_pct": 11.63,
+        "peer_max_pct": 46.37,
+        "lift_vs_overall": 2.03,
+        "gap_vs_overall_pctp": 4.52,
+        "gap_vs_peer_max_pctp": -37.47
+      },
+      {
+        "feature": "비율_육류/회식",
+        "category": "육류/회식",
+        "cluster_pct": 7.72,
+        "overall_pct": 4.96,
+        "peer_avg_pct": 3.25,
+        "peer_max_pct": 5.79,
+        "lift_vs_overall": 1.55,
+        "gap_vs_overall_pctp": 2.75,
+        "gap_vs_peer_max_pctp": 1.93
+      }
+    ],
+    "headline": "사무/교육용품 21.8% (전체 평균 1.7%, 13.05배, 타 클러스터 최고 대비 +18.7%p) / 분식 18.2% (전체 평균 3.1%, 5.90배, 타 클러스터 최고 대비 +8.8%p)"
+  },
+  {
+    "cluster_id": 2,
+    "cluster_name": "화장품·커피형",
+    "cluster_signature": "외식(20%) · 자동차/유지비(9%)",
+    "cluster_description": "화장품소매와 커피/음료 비중이 두드러지고 외식이 함께 나타나는 취향 소비형 유형",
+    "profile_count": 20,
+    "profile_share_pct": 15.15,
+    "top_features": [
+      {
+        "feature": "비율_외식",
+        "category": "외식",
+        "cluster_pct": 20.17,
+        "overall_pct": 17.53,
+        "peer_avg_pct": 12.87,
+        "peer_max_pct": 26.12,
+        "lift_vs_overall": 1.15,
+        "gap_vs_overall_pctp": 2.65,
+        "gap_vs_peer_max_pctp": -5.95
+      },
+      {
+        "feature": "비율_자동차/유지비",
+        "category": "자동차/유지비",
+        "cluster_pct": 8.55,
+        "overall_pct": 15.67,
+        "peer_avg_pct": 9.1,
+        "peer_max_pct": 22.8,
+        "lift_vs_overall": 0.55,
+        "gap_vs_overall_pctp": -7.12,
+        "gap_vs_peer_max_pctp": -14.25
+      },
+      {
+        "feature": "비율_커피/음료",
+        "category": "커피/음료",
+        "cluster_pct": 8.45,
+        "overall_pct": 4.38,
+        "peer_avg_pct": 11.7,
+        "peer_max_pct": 46.37,
+        "lift_vs_overall": 1.93,
+        "gap_vs_overall_pctp": 4.07,
+        "gap_vs_peer_max_pctp": -37.92
+      },
+      {
+        "feature": "비율_화장품소매",
+        "category": "화장품소매",
+        "cluster_pct": 5.99,
+        "overall_pct": 2.41,
+        "peer_avg_pct": 2.77,
+        "peer_max_pct": 9.7,
+        "lift_vs_overall": 2.49,
+        "gap_vs_overall_pctp": 3.58,
+        "gap_vs_peer_max_pctp": -3.71
+      },
+      {
+        "feature": "비율_육류/회식",
+        "category": "육류/회식",
+        "cluster_pct": 5.79,
+        "overall_pct": 4.96,
+        "peer_avg_pct": 3.52,
+        "peer_max_pct": 7.72,
+        "lift_vs_overall": 1.17,
+        "gap_vs_overall_pctp": 0.82,
+        "gap_vs_peer_max_pctp": -1.93
+      }
+    ],
+    "headline": "외식 20.2% (전체 평균 17.5%, 1.15배, 타 클러스터 최고 대비 -6.0%p) / 자동차/유지비 8.6% (전체 평균 15.7%, 0.55배, 타 클러스터 최고 대비 -14.2%p)"
+  },
+  {
+    "cluster_id": 3,
+    "cluster_name": "차량·생활이동형",
+    "cluster_signature": "자동차/유지비(23%) · 외식(17%)",
+    "cluster_description": "자동차/유지비를 중심으로 외식, 병원/의료, 교육/학원 지출이 함께 붙는 이동 생활형 유형",
+    "profile_count": 44,
+    "profile_share_pct": 33.33,
+    "top_features": [
+      {
+        "feature": "비율_자동차/유지비",
+        "category": "자동차/유지비",
+        "cluster_pct": 22.8,
+        "overall_pct": 15.67,
+        "peer_avg_pct": 7.07,
+        "peer_max_pct": 17.24,
+        "lift_vs_overall": 1.45,
+        "gap_vs_overall_pctp": 7.13,
+        "gap_vs_peer_max_pctp": 5.56
+      },
+      {
+        "feature": "비율_외식",
+        "category": "외식",
+        "cluster_pct": 16.62,
+        "overall_pct": 17.53,
+        "peer_avg_pct": 13.37,
+        "peer_max_pct": 26.12,
+        "lift_vs_overall": 0.95,
+        "gap_vs_overall_pctp": -0.91,
+        "gap_vs_peer_max_pctp": -9.51
+      },
+      {
+        "feature": "비율_병원/의료",
+        "category": "병원/의료",
+        "cluster_pct": 10.9,
+        "overall_pct": 10.99,
+        "peer_avg_pct": 5.24,
+        "peer_max_pct": 17.19,
+        "lift_vs_overall": 0.99,
+        "gap_vs_overall_pctp": -0.1,
+        "gap_vs_peer_max_pctp": -6.29
+      },
+      {
+        "feature": "비율_교육/학원",
+        "category": "교육/학원",
+        "cluster_pct": 7.3,
+        "overall_pct": 3.65,
+        "peer_avg_pct": 4.71,
+        "peer_max_pct": 22.29,
+        "lift_vs_overall": 2.0,
+        "gap_vs_overall_pctp": 3.65,
+        "gap_vs_peer_max_pctp": -14.99
+      },
+      {
+        "feature": "비율_음/식료품소매",
+        "category": "음/식료품소매",
+        "cluster_pct": 6.14,
+        "overall_pct": 8.98,
+        "peer_avg_pct": 9.42,
+        "peer_max_pct": 17.27,
+        "lift_vs_overall": 0.68,
+        "gap_vs_overall_pctp": -2.84,
+        "gap_vs_peer_max_pctp": -11.13
+      }
+    ],
+    "headline": "자동차/유지비 22.8% (전체 평균 15.7%, 1.45배, 타 클러스터 최고 대비 +5.6%p) / 외식 16.6% (전체 평균 17.5%, 0.95배, 타 클러스터 최고 대비 -9.5%p)"
+  },
+  {
+    "cluster_id": 4,
+    "cluster_name": "외식·생활관리형",
+    "cluster_signature": "외식(26%) · 자동차/유지비(17%)",
+    "cluster_description": "외식 비중이 높고 자동차/유지비, 음/식료품소매, 의약/의료품 지출이 함께 나타나는 생활관리형 유형",
+    "profile_count": 10,
+    "profile_share_pct": 7.58,
+    "top_features": [
+      {
+        "feature": "비율_외식",
+        "category": "외식",
+        "cluster_pct": 26.12,
+        "overall_pct": 17.53,
+        "peer_avg_pct": 12.02,
+        "peer_max_pct": 20.17,
+        "lift_vs_overall": 1.49,
+        "gap_vs_overall_pctp": 8.59,
+        "gap_vs_peer_max_pctp": 5.95
+      },
+      {
+        "feature": "비율_자동차/유지비",
+        "category": "자동차/유지비",
+        "cluster_pct": 17.24,
+        "overall_pct": 15.67,
+        "peer_avg_pct": 7.86,
+        "peer_max_pct": 22.8,
+        "lift_vs_overall": 1.1,
+        "gap_vs_overall_pctp": 1.57,
+        "gap_vs_peer_max_pctp": -5.56
+      },
+      {
+        "feature": "비율_음/식료품소매",
+        "category": "음/식료품소매",
+        "cluster_pct": 15.89,
+        "overall_pct": 8.98,
+        "peer_avg_pct": 8.02,
+        "peer_max_pct": 17.27,
+        "lift_vs_overall": 1.77,
+        "gap_vs_overall_pctp": 6.91,
+        "gap_vs_peer_max_pctp": -1.38
+      },
+      {
+        "feature": "비율_의약/의료품",
+        "category": "의약/의료품",
+        "cluster_pct": 11.18,
+        "overall_pct": 5.49,
+        "peer_avg_pct": 4.02,
+        "peer_max_pct": 12.42,
+        "lift_vs_overall": 2.03,
+        "gap_vs_overall_pctp": 5.68,
+        "gap_vs_peer_max_pctp": -1.24
+      },
+      {
+        "feature": "비율_병원/의료",
+        "category": "병원/의료",
+        "cluster_pct": 11.04,
+        "overall_pct": 10.99,
+        "peer_avg_pct": 5.22,
+        "peer_max_pct": 17.19,
+        "lift_vs_overall": 1.0,
+        "gap_vs_overall_pctp": 0.05,
+        "gap_vs_peer_max_pctp": -6.15
+      }
+    ],
+    "headline": "외식 26.1% (전체 평균 17.5%, 1.49배, 타 클러스터 최고 대비 +6.0%p) / 자동차/유지비 17.2% (전체 평균 15.7%, 1.10배, 타 클러스터 최고 대비 -5.6%p)"
+  },
+  {
+    "cluster_id": 5,
+    "cluster_name": "의료·의약품 중심형",
+    "cluster_signature": "외식(19%) · 병원/의료(17%)",
+    "cluster_description": "병원/의료와 의약/의료품 비중이 높고 음/식료품소매가 함께 나타나는 건강관리형 유형",
+    "profile_count": 44,
+    "profile_share_pct": 33.33,
+    "top_features": [
+      {
+        "feature": "비율_외식",
+        "category": "외식",
+        "cluster_pct": 19.09,
+        "overall_pct": 17.53,
+        "peer_avg_pct": 13.02,
+        "peer_max_pct": 26.12,
+        "lift_vs_overall": 1.09,
+        "gap_vs_overall_pctp": 1.56,
+        "gap_vs_peer_max_pctp": -7.03
+      },
+      {
+        "feature": "비율_병원/의료",
+        "category": "병원/의료",
+        "cluster_pct": 17.19,
+        "overall_pct": 10.99,
+        "peer_avg_pct": 4.34,
+        "peer_max_pct": 11.04,
+        "lift_vs_overall": 1.56,
+        "gap_vs_overall_pctp": 6.19,
+        "gap_vs_peer_max_pctp": 6.15
+      },
+      {
+        "feature": "비율_자동차/유지비",
+        "category": "자동차/유지비",
+        "cluster_pct": 15.97,
+        "overall_pct": 15.67,
+        "peer_avg_pct": 8.04,
+        "peer_max_pct": 22.8,
+        "lift_vs_overall": 1.02,
+        "gap_vs_overall_pctp": 0.3,
+        "gap_vs_peer_max_pctp": -6.83
+      },
+      {
+        "feature": "비율_음/식료품소매",
+        "category": "음/식료품소매",
+        "cluster_pct": 13.29,
+        "overall_pct": 8.98,
+        "peer_avg_pct": 8.39,
+        "peer_max_pct": 17.27,
+        "lift_vs_overall": 1.48,
+        "gap_vs_overall_pctp": 4.31,
+        "gap_vs_peer_max_pctp": -3.98
+      },
+      {
+        "feature": "비율_의약/의료품",
+        "category": "의약/의료품",
+        "cluster_pct": 8.29,
+        "overall_pct": 5.49,
+        "peer_avg_pct": 4.44,
+        "peer_max_pct": 12.42,
+        "lift_vs_overall": 1.51,
+        "gap_vs_overall_pctp": 2.8,
+        "gap_vs_peer_max_pctp": -4.13
+      }
+    ],
+    "headline": "외식 19.1% (전체 평균 17.5%, 1.09배, 타 클러스터 최고 대비 -7.0%p) / 병원/의료 17.2% (전체 평균 11.0%, 1.56배, 타 클러스터 최고 대비 +6.2%p)"
+  },
+  {
+    "cluster_id": 6,
+    "cluster_name": "교육·선물 특화형",
+    "cluster_signature": "교육/학원(22%) · 선물/완구(22%)",
+    "cluster_description": "교육/학원, 선물/완구, 가전제품 소비가 매우 집중된 특화형 유형",
+    "profile_count": 1,
+    "profile_share_pct": 0.76,
+    "top_features": [
+      {
+        "feature": "비율_교육/학원",
+        "category": "교육/학원",
+        "cluster_pct": 22.29,
+        "overall_pct": 3.65,
+        "peer_avg_pct": 2.57,
+        "peer_max_pct": 7.3,
+        "lift_vs_overall": 6.1,
+        "gap_vs_overall_pctp": 18.64,
+        "gap_vs_peer_max_pctp": 14.99
+      },
+      {
+        "feature": "비율_선물/완구",
+        "category": "선물/완구",
+        "cluster_pct": 22.13,
+        "overall_pct": 0.56,
+        "peer_avg_pct": 0.45,
+        "peer_max_pct": 0.98,
+        "lift_vs_overall": 39.34,
+        "gap_vs_overall_pctp": 21.57,
+        "gap_vs_peer_max_pctp": 21.15
+      },
+      {
+        "feature": "비율_가전제품",
+        "category": "가전제품",
+        "cluster_pct": 20.12,
+        "overall_pct": 0.86,
+        "peer_avg_pct": 0.74,
+        "peer_max_pct": 1.28,
+        "lift_vs_overall": 23.34,
+        "gap_vs_overall_pctp": 19.26,
+        "gap_vs_peer_max_pctp": 18.84
+      },
+      {
+        "feature": "비율_커피/음료",
+        "category": "커피/음료",
+        "cluster_pct": 19.07,
+        "overall_pct": 4.38,
+        "peer_avg_pct": 10.18,
+        "peer_max_pct": 46.37,
+        "lift_vs_overall": 4.36,
+        "gap_vs_overall_pctp": 14.69,
+        "gap_vs_peer_max_pctp": -27.3
+      },
+      {
+        "feature": "비율_분식",
+        "category": "분식",
+        "cluster_pct": 5.35,
+        "overall_pct": 3.09,
+        "peer_avg_pct": 5.4,
+        "peer_max_pct": 18.21,
+        "lift_vs_overall": 1.73,
+        "gap_vs_overall_pctp": 2.26,
+        "gap_vs_peer_max_pctp": -12.86
+      }
+    ],
+    "headline": "교육/학원 22.3% (전체 평균 3.6%, 6.10배, 타 클러스터 최고 대비 +15.0%p) / 선물/완구 22.1% (전체 평균 0.6%, 39.34배, 타 클러스터 최고 대비 +21.1%p)"
+  },
+  {
+    "cluster_id": 7,
+    "cluster_name": "커피·디저트형",
+    "cluster_signature": "커피/음료(46%) · 화장품소매(10%)",
+    "cluster_description": "커피/음료 비중이 매우 높고 화장품소매와 제과/제빵/떡/케익이 함께 나타나는 간식 중심형 유형",
+    "profile_count": 2,
+    "profile_share_pct": 1.52,
+    "top_features": [
+      {
+        "feature": "비율_커피/음료",
+        "category": "커피/음료",
+        "cluster_pct": 46.37,
+        "overall_pct": 4.38,
+        "peer_avg_pct": 6.28,
+        "peer_max_pct": 19.07,
+        "lift_vs_overall": 10.6,
+        "gap_vs_overall_pctp": 41.99,
+        "gap_vs_peer_max_pctp": 27.3
+      },
+      {
+        "feature": "비율_화장품소매",
+        "category": "화장품소매",
+        "cluster_pct": 9.7,
+        "overall_pct": 2.41,
+        "peer_avg_pct": 2.24,
+        "peer_max_pct": 5.99,
+        "lift_vs_overall": 4.03,
+        "gap_vs_overall_pctp": 7.29,
+        "gap_vs_peer_max_pctp": 3.71
+      },
+      {
+        "feature": "비율_분식",
+        "category": "분식",
+        "cluster_pct": 9.4,
+        "overall_pct": 3.09,
+        "peer_avg_pct": 4.82,
+        "peer_max_pct": 18.21,
+        "lift_vs_overall": 3.05,
+        "gap_vs_overall_pctp": 6.32,
+        "gap_vs_peer_max_pctp": -8.8
+      },
+      {
+        "feature": "비율_제과/제빵/떡/케익",
+        "category": "제과/제빵/떡/케익",
+        "cluster_pct": 8.99,
+        "overall_pct": 1.97,
+        "peer_avg_pct": 1.39,
+        "peer_max_pct": 2.28,
+        "lift_vs_overall": 4.57,
+        "gap_vs_overall_pctp": 7.02,
+        "gap_vs_peer_max_pctp": 6.71
+      },
+      {
+        "feature": "비율_음/식료품소매",
+        "category": "음/식료품소매",
+        "cluster_pct": 7.0,
+        "overall_pct": 8.98,
+        "peer_avg_pct": 9.29,
+        "peer_max_pct": 17.27,
+        "lift_vs_overall": 0.78,
+        "gap_vs_overall_pctp": -1.97,
+        "gap_vs_peer_max_pctp": -10.26
+      }
+    ],
+    "headline": "커피/음료 46.4% (전체 평균 4.4%, 10.60배, 타 클러스터 최고 대비 +27.3%p) / 화장품소매 9.7% (전체 평균 2.4%, 4.03배, 타 클러스터 최고 대비 +3.7%p)"
+  }
+]

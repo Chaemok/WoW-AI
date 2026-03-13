@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>소비 유형 데모</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --line: #d7dee8;
+      --text: #172033;
+      --muted: #64748b;
+      --accent: #0f766e;
+      --accent-soft: #ecfeff;
+      --accent-deep: #115e59;
+      --good: #166534;
+      --good-soft: #dcfce7;
+      --bad: #b91c1c;
+      --bad-soft: #fee2e2;
+      --warn: #b45309;
+      --warn-soft: #fff7ed;
+      --shadow: 0 18px 48px rgba(15, 23, 42, 0.07);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, #ccfbf1 0, transparent 28%),
+        radial-gradient(circle at top right, #e0f2fe 0, transparent 24%),
+        var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+    .hero {
+      margin-bottom: 22px;
+    }
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.15;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .stack {
+      display: grid;
+      gap: 20px;
+    }
+    .wide-card {
+      margin-top: 20px;
+    }
+    .split-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+      gap: 20px;
+    }
+    .override-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 20px;
+      margin-top: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 19px;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .section-title h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    .section-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    select, button, input {
+      height: 44px;
+      border-radius: 12px;
+      font-size: 14px;
+    }
+    select, input {
+      width: 100%;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--text);
+    }
+    input[type="file"] {
+      padding: 10px 12px;
+      height: auto;
+      line-height: 1.3;
+    }
+    button {
+      padding: 0 16px;
+      border: none;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 0.16s ease, transform 0.16s ease;
+    }
+    button:hover { background: var(--accent-deep); }
+    button:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+      transform: none;
+    }
+    button.secondary {
+      background: #ffffff;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+    button.secondary:hover { background: #f8fafc; }
+    .row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .row.compact {
+      grid-template-columns: minmax(0, 1fr) 160px 160px;
+    }
+    .row.upload {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 170px 130px;
+    }
+    .row.override-form {
+      grid-template-columns: 1.1fr 0.9fr 1.4fr 0.9fr;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .toolbar-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .mini-btn {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .mini-btn:hover { background: #f8fafc; }
+    .help {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .status {
+      margin-top: 12px;
+      padding: 11px 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--muted);
+    }
+    .status.good {
+      background: var(--good-soft);
+      color: var(--good);
+      border-color: #bbf7d0;
+    }
+    .status.bad {
+      background: var(--bad-soft);
+      color: var(--bad);
+      border-color: #fecaca;
+    }
+    .status.warn {
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-color: #fed7aa;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+      margin-bottom: 6px;
+    }
+    .stats.result-stats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 13px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .stat .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .stat .value {
+      margin-top: 6px;
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .stat .detail {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .table-wrap {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: auto;
+      background: white;
+      max-height: 420px;
+    }
+    .table-wrap.tall {
+      max-height: 560px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f8fafc;
+      font-size: 12px;
+      color: var(--muted);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    td.num { text-align: right; }
+    .empty {
+      padding: 20px 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .pill.good {
+      background: var(--good-soft);
+      color: var(--good);
+    }
+    .pill.bad {
+      background: var(--bad-soft);
+      color: var(--bad);
+    }
+    .pill.neutral {
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+    }
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 15px;
+      margin-bottom: 12px;
+      background: #fcfdff;
+    }
+    .box h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+    .muted { color: var(--muted); }
+    .list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+    }
+    .list li { margin: 6px 0; }
+    .hidden { display: none; }
+    textarea.hidden { display: none; }
+    .path-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-deep);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .candidate-row { cursor: pointer; }
+    .candidate-row:hover { background: #f8fafc; }
+    .reason-cell {
+      min-width: 240px;
+      white-space: normal;
+      line-height: 1.45;
+    }
+    .action-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .action-group select {
+      min-width: 150px;
+      width: 150px;
+      height: 36px;
+      border-radius: 10px;
+    }
+    .action-group .mini-btn {
+      height: 36px;
+    }
+    .chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    @media (max-width: 1080px) {
+      .grid, .split-card, .override-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      .row, .row.compact, .row.upload, .row.override-form { grid-template-columns: 1fr; }
+      .stats, .stats.result-stats { grid-template-columns: 1fr; }
+      .action-group { flex-direction: column; align-items: stretch; }
+      .action-group select { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>소비 유형 분류 데모</h1>
+      <p>은행/카드 CSV를 올려 전처리하고, 제외 거래를 다시 분류한 뒤 바로 클러스터 예측까지 이어서 확인한다.</p>
+    </div>
+
+    <div class="grid">
+      <section class="stack">
+        <section class="card">
+          <div class="section-title">
+            <div>
+              <h2>1. 원본 거래 업로드</h2>
+              <p>bank.csv, card.csv 중 있는 파일만 올려도 된다.</p>
+            </div>
+          </div>
+
+          <div class="row upload">
+            <input id="bankFileInput" type="file" accept=".csv,text/csv">
+            <input id="cardFileInput" type="file" accept=".csv,text/csv">
+            <button type="button" id="preprocessBtn">전처리 실행</button>
+            <button type="button" id="resetUploadBtn" class="secondary">업로드 초기화</button>
+          </div>
+
+          <div class="help">전처리가 끝나면 포함 거래는 위 집계 목록으로 올라가고, `제외` 거래는 아래 재분류 목록으로 분리된다.</div>
+          <div id="preprocessStatus" class="status warn">아직 원본 거래를 업로드하지 않았다.</div>
+
+          <div class="stats">
+            <div class="stat">
+              <div class="label">원본 거래 수</div>
+              <div id="sourceTransactionCount" class="value">0건</div>
+              <div class="detail">업로드 후 계산</div>
+            </div>
+            <div class="stat">
+              <div class="label">총 거래 금액</div>
+              <div id="sourceTotalAmount" class="value">0원</div>
+              <div class="detail">포함 + 제외 합계</div>
+            </div>
+            <div class="stat">
+              <div class="label">포함 금액</div>
+              <div id="includedAmount" class="value">0원</div>
+              <div class="detail">예측 입력 대상</div>
+            </div>
+            <div class="stat">
+              <div class="label">제외 금액</div>
+              <div id="excludedAmount" class="value">0원</div>
+              <div class="detail">아래에서 재분류 가능</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-title">
+            <div>
+              <h2>2. 예측 입력 집계</h2>
+              <p>전처리 결과가 자동으로 채워진다. 수동으로 행을 더 넣을 수도 있다.</p>
+            </div>
+          </div>
+
+          <div class="row">
+            <select id="categorySelect">
+              {% for category in categories %}
+              <option value="{{ category }}">{{ category }}</option>
+              {% endfor %}
+            </select>
+            <input id="amountInput" type="number" min="0" step="100" placeholder="금액 입력">
+            <input id="countInput" type="number" min="1" step="1" value="1">
+            <button type="button" id="addRowBtn" class="secondary">수동 행 추가</button>
+          </div>
+
+          <div id="categoryHelp" class="help hidden"></div>
+
+          <div class="toolbar">
+            <strong>포함된 거래 목록</strong>
+            <div class="toolbar-actions">
+              <button type="button" id="loadDummyBtn" class="mini-btn">더미데이터 불러오기</button>
+              <button type="button" id="clearRowsBtn" class="mini-btn">집계 비우기</button>
+              <button type="button" id="copyCsvBtn" class="mini-btn">CSV 복사</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>카테고리</th>
+                  <th>금액</th>
+                  <th>건수</th>
+                  <th>삭제</th>
+                </tr>
+              </thead>
+              <tbody id="rowsTableBody"></tbody>
+            </table>
+            <div id="emptyState" class="empty">아직 예측용 집계가 없다.</div>
+          </div>
+
+          <div class="row compact">
+            <select id="expectedCluster">
+              <option value="">예상 유형 선택</option>
+              {% for cluster_id, item in cluster_definitions.items() %}
+              <option value="{{ cluster_id }}">Cluster {{ cluster_id }} - {{ item.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" id="predictBtn">예측 실행</button>
+            <textarea id="csvInput" class="hidden">{{ dummy_csv }}</textarea>
+          </div>
+        </section>
+      </section>
+
+      <section class="card">
+        <h2>3. 결과</h2>
+        <div id="placeholder" class="muted">예측 실행 후 결과가 표시된다.</div>
+        <div id="resultArea" class="hidden">
+          <div class="stats result-stats">
+            <div class="stat">
+              <div class="label">입력 행 수</div>
+              <div id="rowCount" class="value">-</div>
+            </div>
+            <div class="stat">
+              <div class="label">총 금액</div>
+              <div id="totalAmount" class="value">-</div>
+            </div>
+            <div class="stat">
+              <div class="label">총 건수</div>
+              <div id="totalCount" class="value">-</div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h3>예상 vs 실제</h3>
+            <div id="compareBadge"></div>
+            <p id="expectedText" class="muted"></p>
+            <p id="actualText"></p>
+          </div>
+
+          <div class="box">
+            <h3>실제 분류</h3>
+            <p id="actualDescription"></p>
+            <p id="actualHeadline" class="muted"></p>
+          </div>
+
+          <div class="box">
+            <h3>주요 지출 항목</h3>
+            <ul id="topItems" class="list"></ul>
+          </div>
+
+          <div class="box">
+            <h3>고정 클러스터 기준</h3>
+            <ul id="referenceItems" class="list"></ul>
+          </div>
+
+          <div class="box">
+            <h3>클러스터 확률</h3>
+            <ul id="probabilityItems" class="list"></ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card wide-card">
+      <div class="split-card">
+        <div>
+          <div class="section-title">
+            <div>
+              <h2>4. 제외 거래 재분류</h2>
+              <p>카테고리를 고른 뒤 이동하면 위 예측 집계에 금액과 건수가 합산되고, 아래 목록에서는 제거된다.</p>
+            </div>
+          </div>
+
+          <div id="excludedStatus" class="status warn">전처리 후 `제외` 거래가 여기 표시된다.</div>
+
+          <div class="table-wrap tall">
+            <table>
+              <thead>
+                <tr>
+                  <th>merchant_name</th>
+                  <th>금액</th>
+                  <th>건수</th>
+                  <th>결제/출처</th>
+                  <th>근거</th>
+                  <th>재분류</th>
+                </tr>
+              </thead>
+              <tbody id="excludedTableBody"></tbody>
+            </table>
+            <div id="excludedEmptyState" class="empty">현재 재분류할 제외 거래가 없다.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">
+            <div>
+              <h2>5. merchant override 저장</h2>
+              <p>재분류가 맞다고 판단되면 아래에서 영구 override로 저장할 수 있다.</p>
+            </div>
+          </div>
+
+          <div class="sub">저장 위치: <span class="path-chip">{{ override_path }}</span></div>
+
+          <div class="row override-form">
+            <input id="overrideMerchantInput" list="merchantCandidateList" type="text" placeholder="merchant_name 입력 또는 후보 선택">
+            <select id="overrideCategorySelect">
+              <option value="">카테고리 선택</option>
+              {% for category in categories %}
+              <option value="{{ category }}">{{ category }}</option>
+              {% endfor %}
+            </select>
+            <input id="overrideReasonInput" type="text" placeholder="재설정 이유 입력">
+            <button type="button" id="addOverrideBtn">추가/수정</button>
+          </div>
+
+          <datalist id="merchantCandidateList">
+            {% for row in override_candidates %}
+            <option value="{{ row.merchant_name }}"></option>
+            {% endfor %}
+          </datalist>
+
+          <div class="toolbar">
+            <strong>현재 override</strong>
+            <div class="toolbar-actions">
+              <button type="button" id="saveOverridesBtn" class="mini-btn">CSV 저장</button>
+              <button type="button" id="clearOverrideFormBtn" class="mini-btn">입력 초기화</button>
+            </div>
+          </div>
+
+          <div id="overrideStatus" class="status warn">현재 저장된 override를 수정한 뒤 저장 버튼을 눌러야 CSV에 반영된다.</div>
+
+          <div class="override-grid">
+            <div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>merchant_name</th>
+                      <th>카테고리</th>
+                      <th>사유</th>
+                      <th>편집</th>
+                      <th>삭제</th>
+                    </tr>
+                  </thead>
+                  <tbody id="overrideTableBody"></tbody>
+                </table>
+                <div id="overrideEmptyState" class="empty">저장된 override가 없다.</div>
+              </div>
+            </div>
+
+            <div>
+              <div class="sub">후보 merchant를 클릭하면 입력창으로 가져온다. 현재 `제외`인 항목이 먼저 보인다.</div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>merchant_name</th>
+                      <th>현재 카테고리</th>
+                      <th>현재 근거</th>
+                    </tr>
+                  </thead>
+                  <tbody id="candidateTableBody"></tbody>
+                </table>
+                <div id="candidateEmptyState" class="empty">표시할 후보 merchant가 없다.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const dummyCsv = {{ dummy_csv | tojson }};
+    const categories = {{ categories | tojson }};
+    const categoryHelpMap = {{ category_help | tojson }};
+    const initialOverrideRows = {{ override_rows | tojson }};
+    const overrideCandidates = {{ override_candidates | tojson }};
+
+    const bankFileInput = document.getElementById('bankFileInput');
+    const cardFileInput = document.getElementById('cardFileInput');
+    const preprocessBtn = document.getElementById('preprocessBtn');
+    const resetUploadBtn = document.getElementById('resetUploadBtn');
+    const preprocessStatus = document.getElementById('preprocessStatus');
+    const sourceTransactionCount = document.getElementById('sourceTransactionCount');
+    const sourceTotalAmount = document.getElementById('sourceTotalAmount');
+    const includedAmount = document.getElementById('includedAmount');
+    const excludedAmount = document.getElementById('excludedAmount');
+
+    const categorySelect = document.getElementById('categorySelect');
+    const categoryHelp = document.getElementById('categoryHelp');
+    const amountInput = document.getElementById('amountInput');
+    const countInput = document.getElementById('countInput');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const clearRowsBtn = document.getElementById('clearRowsBtn');
+    const copyCsvBtn = document.getElementById('copyCsvBtn');
+    const csvInput = document.getElementById('csvInput');
+    const expectedCluster = document.getElementById('expectedCluster');
+    const predictBtn = document.getElementById('predictBtn');
+    const loadDummyBtn = document.getElementById('loadDummyBtn');
+    const rowsTableBody = document.getElementById('rowsTableBody');
+    const emptyState = document.getElementById('emptyState');
+
+    const excludedStatus = document.getElementById('excludedStatus');
+    const excludedTableBody = document.getElementById('excludedTableBody');
+    const excludedEmptyState = document.getElementById('excludedEmptyState');
+
+    const placeholder = document.getElementById('placeholder');
+    const resultArea = document.getElementById('resultArea');
+
+    const overrideMerchantInput = document.getElementById('overrideMerchantInput');
+    const overrideCategorySelect = document.getElementById('overrideCategorySelect');
+    const overrideReasonInput = document.getElementById('overrideReasonInput');
+    const addOverrideBtn = document.getElementById('addOverrideBtn');
+    const saveOverridesBtn = document.getElementById('saveOverridesBtn');
+    const clearOverrideFormBtn = document.getElementById('clearOverrideFormBtn');
+    const overrideStatus = document.getElementById('overrideStatus');
+    const overrideTableBody = document.getElementById('overrideTableBody');
+    const overrideEmptyState = document.getElementById('overrideEmptyState');
+    const candidateTableBody = document.getElementById('candidateTableBody');
+    const candidateEmptyState = document.getElementById('candidateEmptyState');
+
+    let records = [];
+    let excludedRows = [];
+    let overrideRows = [...initialOverrideRows];
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function formatAmount(value) {
+      return `${Number(value || 0).toLocaleString()}원`;
+    }
+
+    function formatCount(value) {
+      return `${Number(value || 0).toLocaleString()}건`;
+    }
+
+    function sortRecords() {
+      records.sort((left, right) => {
+        if (right.amt !== left.amt) {
+          return right.amt - left.amt;
+        }
+        if (right.cnt !== left.cnt) {
+          return right.cnt - left.cnt;
+        }
+        return String(left.card_tpbuz_nm_2).localeCompare(String(right.card_tpbuz_nm_2), 'ko');
+      });
+    }
+
+    function syncCsv() {
+      const header = 'card_tpbuz_nm_2,amt,cnt';
+      const body = records.map((row) => `${row.card_tpbuz_nm_2},${row.amt},${row.cnt}`);
+      csvInput.value = [header, ...body].join('\n');
+    }
+
+    function updateCategoryHelp() {
+      const helpText = categoryHelpMap[categorySelect.value];
+      if (helpText) {
+        categoryHelp.textContent = `참고: ${helpText}`;
+        categoryHelp.classList.remove('hidden');
+        return;
+      }
+
+      categoryHelp.textContent = '';
+      categoryHelp.classList.add('hidden');
+    }
+
+    function setPreprocessStatus(message, tone = 'warn') {
+      preprocessStatus.textContent = message;
+      preprocessStatus.className = `status ${tone}`;
+    }
+
+    function setExcludedStatus(message, tone = 'warn') {
+      excludedStatus.textContent = message;
+      excludedStatus.className = `status ${tone}`;
+    }
+
+    function updateSourceSummary(summary = {}) {
+      sourceTransactionCount.textContent = formatCount(summary.transaction_count || 0);
+      sourceTotalAmount.textContent = formatAmount(summary.total_amount || 0);
+      includedAmount.textContent = formatAmount(summary.included_amount || 0);
+      excludedAmount.textContent = formatAmount(summary.excluded_amount || 0);
+    }
+
+    function renderRows() {
+      sortRecords();
+      syncCsv();
+      rowsTableBody.innerHTML = '';
+      emptyState.style.display = records.length ? 'none' : 'block';
+
+      records.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(row.card_tpbuz_nm_2)}</td>
+          <td class="num">${formatAmount(row.amt)}</td>
+          <td class="num">${Number(row.cnt).toLocaleString()}</td>
+          <td><button type="button" class="mini-btn" data-index="${index}">삭제</button></td>
+        `;
+        rowsTableBody.appendChild(tr);
+      });
+
+      rowsTableBody.querySelectorAll('button[data-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          records.splice(Number(button.dataset.index), 1);
+          renderRows();
+        });
+      });
+    }
+
+    function renderExcludedRows() {
+      excludedTableBody.innerHTML = '';
+      excludedEmptyState.style.display = excludedRows.length ? 'none' : 'block';
+
+      excludedRows.forEach((row, index) => {
+        const options = categories.map((category) => {
+          const selected = row.selected_category === category ? 'selected' : '';
+          return `<option value="${escapeHtml(category)}" ${selected}>${escapeHtml(category)}</option>`;
+        }).join('');
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(row.merchant_name)}</td>
+          <td class="num">${formatAmount(row.amount)}</td>
+          <td class="num">${Number(row.cnt).toLocaleString()}</td>
+          <td>
+            <div class="chip-list">
+              <span class="chip">${escapeHtml(row.payment_methods || '-')}</span>
+              <span class="chip">${escapeHtml(row.sources || '-')}</span>
+            </div>
+          </td>
+          <td class="reason-cell">${escapeHtml(row.classification_reason)}</td>
+          <td>
+            <div class="action-group">
+              <select data-category-index="${index}">
+                <option value="">카테고리 선택</option>
+                ${options}
+              </select>
+              <button type="button" class="mini-btn" data-move-index="${index}">위 목록으로 이동</button>
+              <button type="button" class="mini-btn" data-override-index="${index}">override 폼 채우기</button>
+            </div>
+          </td>
+        `;
+        excludedTableBody.appendChild(tr);
+      });
+
+      excludedTableBody.querySelectorAll('select[data-category-index]').forEach((select) => {
+        select.addEventListener('change', () => {
+          const index = Number(select.dataset.categoryIndex);
+          excludedRows[index].selected_category = select.value;
+        });
+      });
+
+      excludedTableBody.querySelectorAll('button[data-move-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          moveExcludedRow(Number(button.dataset.moveIndex));
+        });
+      });
+
+      excludedTableBody.querySelectorAll('button[data-override-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          populateOverrideFromExcluded(excludedRows[Number(button.dataset.overrideIndex)]);
+        });
+      });
+    }
+
+    function setRecords(nextRecords) {
+      records = (nextRecords || []).map((row) => ({
+        card_tpbuz_nm_2: String(row.card_tpbuz_nm_2 || '').trim(),
+        amt: Math.round(Number(row.amt || 0)),
+        cnt: Math.round(Number(row.cnt || 0)),
+      })).filter((row) => row.card_tpbuz_nm_2 && row.amt > 0 && row.cnt > 0);
+      renderRows();
+    }
+
+    function setExcludedRows(nextRows) {
+      excludedRows = (nextRows || []).map((row) => ({
+        merchant_name: String(row.merchant_name || '').trim(),
+        classification_reason: String(row.classification_reason || '').trim(),
+        amount: Math.round(Number(row.amount || 0)),
+        cnt: Math.round(Number(row.cnt || 0)),
+        payment_methods: String(row.payment_methods || '').trim(),
+        sources: String(row.sources || '').trim(),
+        selected_category: '',
+      })).filter((row) => row.merchant_name && row.amount > 0 && row.cnt > 0);
+      renderExcludedRows();
+    }
+
+    function upsertRecord(category, amount, count) {
+      const normalizedCategory = String(category || '').trim();
+      const normalizedAmount = Math.round(Number(amount || 0));
+      const normalizedCount = Math.round(Number(count || 0));
+
+      if (!normalizedCategory || normalizedAmount <= 0 || normalizedCount <= 0) {
+        return false;
+      }
+
+      const existing = records.find((row) => row.card_tpbuz_nm_2 === normalizedCategory);
+      if (existing) {
+        existing.amt += normalizedAmount;
+        existing.cnt += normalizedCount;
+      } else {
+        records.push({
+          card_tpbuz_nm_2: normalizedCategory,
+          amt: normalizedAmount,
+          cnt: normalizedCount,
+        });
+      }
+
+      renderRows();
+      return true;
+    }
+
+    function addRecord() {
+      const category = categorySelect.value;
+      const amount = Number(amountInput.value || 0);
+      const count = Number(countInput.value || 1);
+
+      if (!upsertRecord(category, amount, count)) {
+        alert('카테고리와 0보다 큰 금액/건수를 입력해야 한다.');
+        return;
+      }
+
+      amountInput.value = '';
+      countInput.value = '1';
+      amountInput.focus();
+      setPreprocessStatus('수동 집계 행을 추가했다.', 'good');
+    }
+
+    function loadCsvTextToRows(csvText) {
+      const lines = String(csvText || '').trim().split(/\r?\n/).filter(Boolean);
+      if (lines.length <= 1) {
+        setRecords([]);
+        return;
+      }
+
+      const nextRecords = lines.slice(1).map((line) => {
+        const [card_tpbuz_nm_2, amt, cnt] = line.split(',');
+        return {
+          card_tpbuz_nm_2,
+          amt: Number(amt),
+          cnt: Number(cnt),
+        };
+      });
+
+      setRecords(nextRecords);
+    }
+
+    function populateOverrideForm(row) {
+      overrideMerchantInput.value = row.merchant_name || '';
+      overrideCategorySelect.value = row.category || '';
+      overrideReasonInput.value = row.reason || row.current_reason || '';
+    }
+
+    function populateOverrideFromExcluded(row) {
+      if (!row) {
+        return;
+      }
+
+      populateOverrideForm({
+        merchant_name: row.merchant_name,
+        category: row.selected_category || '',
+        reason: row.classification_reason || '',
+      });
+      setOverrideStatus('선택한 제외 거래를 override 폼으로 가져왔다. 필요하면 category를 고른 뒤 저장해라.', 'warn');
+    }
+
+    function moveExcludedRow(index) {
+      const row = excludedRows[index];
+      if (!row) {
+        return;
+      }
+
+      if (!row.selected_category) {
+        alert('먼저 이동할 카테고리를 선택해야 한다.');
+        return;
+      }
+
+      const moved = upsertRecord(row.selected_category, row.amount, row.cnt);
+      if (!moved) {
+        alert('재분류할 금액 또는 건수가 올바르지 않다.');
+        return;
+      }
+
+      excludedRows.splice(index, 1);
+      renderExcludedRows();
+      setExcludedStatus(`${row.merchant_name} 금액을 ${row.selected_category} 로 이동했다.`, 'good');
+      setPreprocessStatus('제외 거래 일부를 예측 집계로 이동했다.', 'good');
+      populateOverrideFromExcluded(row);
+    }
+
+    function clearOverrideForm() {
+      overrideMerchantInput.value = '';
+      overrideCategorySelect.value = '';
+      overrideReasonInput.value = '';
+      overrideMerchantInput.focus();
+    }
+
+    function setOverrideStatus(message, tone = 'warn') {
+      overrideStatus.textContent = message;
+      overrideStatus.className = `status ${tone}`;
+    }
+
+    function renderOverrideRows() {
+      overrideTableBody.innerHTML = '';
+      overrideEmptyState.style.display = overrideRows.length ? 'none' : 'block';
+
+      overrideRows.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(row.merchant_name)}</td>
+          <td>${escapeHtml(row.category)}</td>
+          <td class="reason-cell">${escapeHtml(row.reason)}</td>
+          <td><button type="button" class="mini-btn" data-edit-index="${index}">편집</button></td>
+          <td><button type="button" class="mini-btn" data-delete-index="${index}">삭제</button></td>
+        `;
+        overrideTableBody.appendChild(tr);
+      });
+
+      overrideTableBody.querySelectorAll('button[data-edit-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          populateOverrideForm(overrideRows[Number(button.dataset.editIndex)]);
+        });
+      });
+
+      overrideTableBody.querySelectorAll('button[data-delete-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          overrideRows.splice(Number(button.dataset.deleteIndex), 1);
+          renderOverrideRows();
+          renderCandidateRows();
+          setOverrideStatus('override 목록이 변경됐다. 저장 버튼을 눌러 CSV에 반영해라.', 'warn');
+        });
+      });
+    }
+
+    function renderCandidateRows() {
+      candidateTableBody.innerHTML = '';
+      candidateEmptyState.style.display = overrideCandidates.length ? 'none' : 'block';
+
+      overrideCandidates.forEach((row) => {
+        const overridden = overrideRows.find((item) => item.merchant_name === row.merchant_name);
+        const tr = document.createElement('tr');
+        tr.className = 'candidate-row';
+        tr.innerHTML = `
+          <td>${escapeHtml(row.merchant_name)}${overridden ? ' <span class="path-chip">override</span>' : ''}</td>
+          <td>${escapeHtml(row.current_category)}</td>
+          <td class="reason-cell">${escapeHtml(row.current_reason)}</td>
+        `;
+        tr.addEventListener('click', () => {
+          populateOverrideForm({
+            merchant_name: row.merchant_name,
+            category: overridden ? overridden.category : (row.current_category === '제외' ? '' : row.current_category),
+            reason: overridden ? overridden.reason : row.current_reason,
+            current_reason: row.current_reason,
+          });
+        });
+        candidateTableBody.appendChild(tr);
+      });
+    }
+
+    function addOrUpdateOverride() {
+      const merchant_name = overrideMerchantInput.value.trim();
+      const category = overrideCategorySelect.value.trim();
+      const reason = overrideReasonInput.value.trim();
+
+      if (!merchant_name || !category) {
+        alert('merchant_name 과 category 는 반드시 입력해야 한다.');
+        return;
+      }
+
+      const nextRow = { merchant_name, category, reason };
+      const existingIndex = overrideRows.findIndex((row) => row.merchant_name === merchant_name);
+      if (existingIndex >= 0) {
+        overrideRows.splice(existingIndex, 1, nextRow);
+      } else {
+        overrideRows.push(nextRow);
+      }
+
+      renderOverrideRows();
+      renderCandidateRows();
+      clearOverrideForm();
+      setOverrideStatus('override 목록이 변경됐다. 저장 버튼을 눌러 CSV에 반영해라.', 'warn');
+    }
+
+    async function saveOverrides() {
+      const response = await fetch('/api/overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: overrideRows }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setOverrideStatus(data.error || 'override 저장 중 오류가 발생했다.', 'bad');
+        return;
+      }
+
+      overrideRows = data.rows || [];
+      renderOverrideRows();
+      renderCandidateRows();
+      setOverrideStatus(data.message || 'override 저장 완료', 'good');
+    }
+
+    async function preprocessTransactions() {
+      if (!bankFileInput.files.length && !cardFileInput.files.length) {
+        alert('bank 또는 card CSV 파일을 하나 이상 선택해야 한다.');
+        return;
+      }
+
+      const formData = new FormData();
+      if (bankFileInput.files[0]) {
+        formData.append('bank_file', bankFileInput.files[0]);
+      }
+      if (cardFileInput.files[0]) {
+        formData.append('card_file', cardFileInput.files[0]);
+      }
+
+      preprocessBtn.disabled = true;
+      setPreprocessStatus('업로드한 CSV를 전처리하는 중이다...', 'warn');
+
+      try {
+        const response = await fetch('/api/preprocess-transactions', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          setPreprocessStatus(data.error || '전처리 중 오류가 발생했다.', 'bad');
+          return;
+        }
+
+        setRecords(data.records || []);
+        setExcludedRows(data.excluded_rows || []);
+        updateSourceSummary(data);
+        setPreprocessStatus(data.message || '전처리 완료', 'good');
+
+        if (excludedRows.length) {
+          setExcludedStatus(`제외 거래 ${excludedRows.length}건이 분리됐다. 필요한 항목만 다시 분류해라.`, 'warn');
+        } else {
+          setExcludedStatus('제외 거래가 없다. 바로 예측을 실행하면 된다.', 'good');
+        }
+      } catch (error) {
+        setPreprocessStatus(error.message || '전처리 요청 실패', 'bad');
+      } finally {
+        preprocessBtn.disabled = false;
+      }
+    }
+
+    function resetUploadState() {
+      bankFileInput.value = '';
+      cardFileInput.value = '';
+      setRecords([]);
+      setExcludedRows([]);
+      updateSourceSummary({});
+      setPreprocessStatus('업로드 상태를 초기화했다.', 'warn');
+      setExcludedStatus('전처리 후 `제외` 거래가 여기 표시된다.', 'warn');
+    }
+
+    function renderList(id, items) {
+      const ul = document.getElementById(id);
+      ul.innerHTML = '';
+      items.forEach((item) => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+    }
+
+    loadDummyBtn.addEventListener('click', () => {
+      loadCsvTextToRows(dummyCsv);
+      setExcludedRows([]);
+      updateSourceSummary({
+        transaction_count: records.reduce((sum, row) => sum + row.cnt, 0),
+        total_amount: records.reduce((sum, row) => sum + row.amt, 0),
+        included_amount: records.reduce((sum, row) => sum + row.amt, 0),
+        excluded_amount: 0,
+      });
+      setPreprocessStatus('더미 집계를 불러왔다.', 'good');
+      setExcludedStatus('더미 데이터에는 별도 제외 거래 목록이 없다.', 'good');
+      expectedCluster.value = '4';
+    });
+
+    clearRowsBtn.addEventListener('click', () => {
+      setRecords([]);
+      setPreprocessStatus('예측 집계를 비웠다.', 'warn');
+    });
+
+    copyCsvBtn.addEventListener('click', async () => {
+      syncCsv();
+      await navigator.clipboard.writeText(csvInput.value);
+      alert('CSV를 복사했다.');
+    });
+
+    addRowBtn.addEventListener('click', addRecord);
+    preprocessBtn.addEventListener('click', preprocessTransactions);
+    resetUploadBtn.addEventListener('click', resetUploadState);
+    addOverrideBtn.addEventListener('click', addOrUpdateOverride);
+    saveOverridesBtn.addEventListener('click', saveOverrides);
+    clearOverrideFormBtn.addEventListener('click', clearOverrideForm);
+    categorySelect.addEventListener('change', updateCategoryHelp);
+
+    amountInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addRecord();
+      }
+    });
+
+    countInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addRecord();
+      }
+    });
+
+    overrideReasonInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addOrUpdateOverride();
+      }
+    });
+
+    predictBtn.addEventListener('click', async () => {
+      syncCsv();
+      if (!records.length) {
+        alert('최소 1건 이상의 예측 집계가 있어야 한다.');
+        return;
+      }
+
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          csv_text: csvInput.value,
+          expected_cluster_id: expectedCluster.value,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || '예측 중 오류가 발생했다.');
+        return;
+      }
+
+      placeholder.classList.add('hidden');
+      resultArea.classList.remove('hidden');
+
+      document.getElementById('rowCount').textContent = `${data.row_count}행`;
+      document.getElementById('totalAmount').textContent = formatAmount(data.total_amount);
+      document.getElementById('totalCount').textContent = `${Number(data.total_count).toLocaleString()}건`;
+
+      const badge = document.getElementById('compareBadge');
+      const expectedText = document.getElementById('expectedText');
+      const actualText = document.getElementById('actualText');
+
+      if (data.expected) {
+        badge.className = `pill ${data.matches ? 'good' : 'bad'}`;
+        badge.textContent = data.matches ? '예상과 일치' : '예상과 불일치';
+        expectedText.textContent = `예상: Cluster ${data.expected.cluster_id} - ${data.expected.cluster_name}`;
+      } else {
+        badge.className = 'pill neutral';
+        badge.textContent = '예상값 없음';
+        expectedText.textContent = '예상 유형을 선택하지 않았다.';
+      }
+
+      actualText.textContent = `실제: Cluster ${data.actual.cluster_id} - ${data.actual.cluster_name}`;
+      document.getElementById('actualDescription').textContent = data.actual.cluster_description;
+      document.getElementById('actualHeadline').textContent = data.actual.cluster_headline || '';
+
+      renderList('topItems', Object.entries(data.actual['주요_소비_항목']).map(([key, value]) => `${key}: ${value}`));
+      renderList(
+        'referenceItems',
+        (data.actual.cluster_reference_top_features || []).slice(0, 5).map(
+          (item) => `${item.category}: ${item.cluster_pct}% (전체 ${item.overall_pct}%, ${item.lift_vs_overall}배)`
+        )
+      );
+      renderList(
+        'probabilityItems',
+        Object.entries(data.actual['전체확률']).map(([key, value]) => `${key}: ${value}%`)
+      );
+    });
+
+    expectedCluster.value = '4';
+    loadCsvTextToRows(dummyCsv);
+    renderOverrideRows();
+    renderCandidateRows();
+    renderExcludedRows();
+    updateCategoryHelp();
+    updateSourceSummary({
+      transaction_count: records.reduce((sum, row) => sum + row.cnt, 0),
+      total_amount: records.reduce((sum, row) => sum + row.amt, 0),
+      included_amount: records.reduce((sum, row) => sum + row.amt, 0),
+      excluded_amount: 0,
+    });
+    setExcludedStatus('더미 집계 기준으로 시작했다. 원본 CSV를 올리면 제외 거래 목록이 갱신된다.', 'warn');
+    amountInput.focus();
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.ipynb_checkpoints/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+
+local/
+nul
+
+# Private raw exports
+bank.csv
+card.csv
+신한은행_거래내역조회_계좌.xls
+신한은행_거래내역조회_카드.xls
+신한은행_거래내역조회_카드.zip
+data/*.zip
+
+# Personal transaction work files
+analysis/merchant_category_map.csv
+analysis/personal_transactions.csv
+analysis/personal_transactions_labeled.csv
+analysis/personal_training_input.csv
+analysis/user_category_overrides.csv
+analysis/merchant_category_map.backup.csv
