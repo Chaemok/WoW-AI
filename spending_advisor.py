@@ -83,11 +83,13 @@ def _build_reduction_targets(
     if total_amt == 0:
         return []
 
-    cluster_info = _gp._cluster_summary.get(cluster_id, {})
-    cluster_pct_map: dict[str, float] = {
-        feat["category"]: float(feat["cluster_pct"])
-        for feat in cluster_info.get("top_features", [])
-    }
+    # _cluster_means 에서 해당 클러스터의 전체 카테고리 실제 평균 비율 사용
+    cluster_row = _gp._cluster_means.loc[cluster_id] if cluster_id in _gp._cluster_means.index else None
+    cluster_pct_map: dict[str, float] = {}
+    if cluster_row is not None:
+        for feat_col, val in cluster_row.items():
+            cat = str(feat_col).replace("비율_", "")
+            cluster_pct_map[cat] = round(float(val) * 100, 1)
 
     targets = []
     for cat, amt in sorted(user_amounts.items(), key=lambda x: -x[1]):
@@ -96,9 +98,11 @@ def _build_reduction_targets(
         excess = round(user_pct - cluster_pct, 1)
 
         if excess > excess_threshold_pct:
-            # 초과분만큼 줄이되 현재 지출의 max_reduction_ratio 상한
-            suggested_reduction_pct = min(excess, user_pct * max_reduction_ratio)
-            suggested_reduction_amt = round(amt * suggested_reduction_pct / 100)
+            # 클러스터 수준까지 줄이는 이상적 절감액 (총지출 기준 %p → 원화 환산)
+            ideal_reduction_amt = total_amt * excess / 100
+            # 단, 현재 카테고리 지출의 max_reduction_ratio 를 상한으로 적용
+            suggested_reduction_amt = round(min(ideal_reduction_amt, amt * max_reduction_ratio))
+            suggested_reduction_pct = round(suggested_reduction_amt / total_amt * 100, 1)
             targets.append(
                 {
                     "category": cat,
@@ -106,7 +110,7 @@ def _build_reduction_targets(
                     "cluster_pct": cluster_pct,
                     "user_amt": int(amt),
                     "excess_pct": excess,
-                    "suggested_reduction_pct": round(suggested_reduction_pct, 1),
+                    "suggested_reduction_pct": suggested_reduction_pct,
                     "suggested_reduction_amt": suggested_reduction_amt,
                 }
             )
@@ -122,10 +126,8 @@ def _build_prompt(
 ) -> str:
     """Gemini 에 보낼 분석 프롬프트 생성"""
 
-    cluster_name = user_result.get("cluster_name_fixed", user_result.get("cluster_name", ""))
-    cluster_desc = user_result.get(
-        "cluster_description_fixed", user_result.get("cluster_description", "")
-    )
+    cluster_name = user_result.get("cluster_name", "")
+    cluster_desc = user_result.get("cluster_description", "")
     top2 = user_result.get("소속확률_top2", [])
 
     # 사용자 소비 현황 텍스트
@@ -151,7 +153,8 @@ def _build_prompt(
         reduction_lines = "  - 클러스터 평균 대비 크게 초과하는 항목이 없습니다."
 
     prompt = f"""당신은 개인 소비 습관 분석 전문가입니다.
-아래 정보를 바탕으로 구체적인 소비 절감 피드백을 한국어로 작성해주세요.
+아래 데이터를 바탕으로 이 사람의 소비 생활 전반에 대한 종합적인 피드백을 한국어로 작성해주세요.
+항목별 나열이 아니라, 이 사람의 소비 패턴이 어떤 삶의 방식을 반영하는지, 어떤 방향으로 바꿔가면 좋을지를 중심으로 서술해주세요.
 
 ---
 ## 사용자 소비 유형
@@ -161,27 +164,27 @@ def _build_prompt(
 ## 월별 소비 현황 (총 {int(total_amt):,}원)
 {breakdown_lines}
 
-## 클러스터 기준 대비 과소비 의심 항목 (절감 우선순위)
+## 클러스터 기준 대비 절감 권장 항목
 {reduction_lines}
 ---
 
 ## 작성 요청
-아래 구조에 맞춰 마크다운 형식으로 피드백을 작성해주세요.
+아래 구조에 맞춰 마크다운으로 작성해주세요.
 
-### 1. 소비 유형 요약
-이 사람의 소비 패턴과 유형 특성을 2~3문장으로 요약하세요.
+### 1. 소비 패턴 진단
+숫자 나열 없이, 이 사람이 어떤 소비 습관을 가진 사람인지 2~3문장으로 묘사해주세요.
+이 소비 패턴이 어떤 생활 방식이나 감정 상태에서 비롯됐을지 추측해서 공감적인 톤으로 써주세요.
 
-### 2. 절감 우선순위 항목
-각 과소비 항목에 대해:
-- 현재 지출액과 권장 목표 금액
-- 절감이 필요한 이유 (클러스터 기준 대비)
-- 구체적인 실천 방법 1~2가지
+### 2. 핵심 개선 방향
+개별 항목 하나하나가 아니라, 이 사람에게 가장 효과적인 소비 습관 변화 방향 2~3가지를 제안해주세요.
+구체적이고 실천 가능한 행동 변화 중심으로 써주세요.
 
-### 3. 이 유형의 소비 함정
-이 소비 유형에서 흔히 빠지는 지출 패턴이나 주의점을 경고해주세요.
+### 3. 이 유형이 빠지기 쉬운 함정
+이 소비 유형에서 반복적으로 나타나는 소비 패턴의 심리적·구조적 원인을 짚어주세요.
 
-### 4. 총 절감 가능 예상액
-모든 절감 항목의 예상 절감액 합계와 절감 후 예상 총 지출을 명시해주세요.
+### 4. 이번 달 절감 목표
+총 절감 가능 예상액과 절감 후 예상 지출을 제시하고,
+"이번 달만큼은 이것 하나만 바꿔보세요" 식으로 가장 우선할 행동 한 가지를 마무리로 제안해주세요.
 """
     return prompt
 
@@ -196,7 +199,7 @@ def analyze_and_advise(
     verbose: bool = True,
 ) -> str:
     """
-    거래 내역 CSV 또는 DataFrame → 클러스터 분석 + Gemini 절감 피드백
+    거래 내역 CSV 또는 DataFrame → 클러스터 분석 + GMS AI 절감 피드백
 
     Parameters
     ----------
@@ -206,7 +209,10 @@ def analyze_and_advise(
 
     Returns
     -------
-    str : Gemini 가 생성한 마크다운 피드백 텍스트
+    tuple[str, dict[str, int], list[dict]]
+        - feedback       : GMS AI 가 생성한 마크다운 피드백 텍스트
+        - reduction_dict : {카테고리명: 권장_절감액(원)} 딕셔너리
+        - cluster_stats  : 카테고리별 사용자 vs 클러스터 기준 비교 리스트
     """
     # GMS_KEY 확인
     gms_key = os.environ.get("GMS_KEY", "").strip()
@@ -239,8 +245,8 @@ def analyze_and_advise(
     cluster_id = user_result["cluster_id"]
 
     if verbose:
-        print(f"✅  클러스터 {cluster_id}: {user_result.get('cluster_name_fixed', '')}")
-        print(f"    {user_result.get('cluster_description_fixed', '')}\n")
+        print(f"✅  클러스터 {cluster_id}: {user_result.get('cluster_name', '')}")
+        print(f"    {user_result.get('cluster_description', '')}\n")
 
     # 3) 카테고리별 실 지출액 집계 (category_map 동일 적용)
     user_amounts = _user_category_amounts(df)
@@ -254,8 +260,8 @@ def analyze_and_advise(
         for t in reduction_targets:
             print(
                 f"    {t['category']:18s} "
-                f"{t['user_pct']:>5.1f}% vs 기준 {t['cluster_pct']:>5.1f}% "
-                f"→ 약 {t['suggested_reduction_amt']:,}원 절감 가능"
+                f"{t['user_pct']:>5.1f}% vs 클러스터 {t['cluster_pct']:>5.1f}% "
+                f"(+{t['excess_pct']:.1f}%p) → 약 {t['suggested_reduction_amt']:,}원 절감 가능"
             )
         print()
 
@@ -278,7 +284,34 @@ def analyze_and_advise(
     )
     feedback: str = response.choices[0].message.content
 
-    return feedback
+    reduction_dict: dict[str, int] = {
+        t["category"]: t["suggested_reduction_amt"]
+        for t in reduction_targets
+    }
+
+    # 클러스터 기준 비교표 생성 — _cluster_means 에서 전체 카테고리 실제 비율 사용
+    cluster_row = _gp._cluster_means.loc[cluster_id] if cluster_id in _gp._cluster_means.index else None
+    full_cluster_pct_map: dict[str, float] = {}
+    if cluster_row is not None:
+        for feat_col, val in cluster_row.items():
+            cat = str(feat_col).replace("비율_", "")
+            full_cluster_pct_map[cat] = round(float(val) * 100, 1)
+
+    cluster_stats: list[dict] = sorted(
+        [
+            {
+                "category": cat,
+                "user_amt": int(amt),
+                "user_pct": round(amt / total_amt * 100, 1),
+                "cluster_pct": full_cluster_pct_map.get(cat, 0.0),
+                "diff_pct": round(amt / total_amt * 100 - full_cluster_pct_map.get(cat, 0.0), 1),
+            }
+            for cat, amt in user_amounts.items()
+        ],
+        key=lambda x: -x["user_amt"],
+    )
+
+    return feedback, reduction_dict, cluster_stats
 
 
 # ─────────────────────────────────────────────────────────────
@@ -322,15 +355,36 @@ if __name__ == "__main__":
     try:
         if args.demo:
             print("[더미 데이터로 실행합니다.]\n")
-            feedback = analyze_and_advise(df=_DEMO_DF)
+            feedback, reduction_dict, cluster_stats = analyze_and_advise(df=_DEMO_DF)
         elif args.csv:
-            feedback = analyze_and_advise(csv_path=args.csv)
+            feedback, reduction_dict, cluster_stats = analyze_and_advise(csv_path=args.csv)
         else:
             print("[옵션 미지정 → 더미 데이터로 실행합니다. --csv 로 실제 파일을 지정하세요.]\n")
-            feedback = analyze_and_advise(df=_DEMO_DF)
+            feedback, reduction_dict, cluster_stats = analyze_and_advise(df=_DEMO_DF)
+
+        print("\n" + "─" * 72)
+        print("  📊  카테고리별 소비 현황 vs 클러스터 기준")
+        print("─" * 72)
+        print(f"  {'카테고리':16s}  {'지출금액':>10s}  {'내 비율':>7s}  {'기준 비율':>8s}  {'차이':>7s}")
+        print("  " + "─" * 68)
+        for s in cluster_stats:
+            diff_str = f"{s['diff_pct']:+.1f}%p"
+            print(
+                f"  {s['category']:16s}  {s['user_amt']:>10,}원"
+                f"  {s['user_pct']:>6.1f}%"
+                f"  {s['cluster_pct']:>7.1f}%"
+                f"  {diff_str:>8s}"
+            )
+
+        print("\n" + "─" * 72)
+        print("  📉  항목별 권장 절감액")
+        print("─" * 72)
+        for cat, amt in sorted(reduction_dict.items(), key=lambda x: -x[1]):
+            print(f"  {cat:18s}  {amt:>8,}원")
+        print(f"  {'합계':18s}  {sum(reduction_dict.values()):>8,}원")
 
         print("\n" + "═" * 64)
-        print("  💰  소비 절감 피드백  (Powered by Gemini)")
+        print("  💰  종합 소비 피드백  (Powered by GMS AI)")
         print("═" * 64)
         print(feedback)
         print("═" * 64)

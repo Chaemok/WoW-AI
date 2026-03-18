@@ -187,26 +187,21 @@ def predict_spending_type(individual_df: pd.DataFrame) -> dict:
     )[:6]
 
     cluster_summary = _cluster_summary.get(cluster_id, {})
-    dynamic_cluster_name = _build_dynamic_cluster_name(cluster_id)
-    dynamic_cluster_description = _build_dynamic_cluster_description(cluster_id)
-    fixed_cluster_name = get_cluster_name(cluster_id, _auto_labels[cluster_id])
-    fixed_cluster_description = get_cluster_description(cluster_id)
+    cluster_name = get_cluster_name(cluster_id, _auto_labels[cluster_id])
+    cluster_description = get_cluster_description(cluster_id)
 
     return {
         'cluster_id':    cluster_id,
-        'cluster_name':  dynamic_cluster_name,
-        'cluster_name_fixed': fixed_cluster_name,
+        'cluster_name':  cluster_name,
+        'cluster_name_fixed': cluster_name,
         'cluster_signature': cluster_summary.get('cluster_signature', _auto_labels[cluster_id]),
-        'cluster_description': dynamic_cluster_description,
-        'cluster_description_fixed': cluster_summary.get(
-            'cluster_description',
-            fixed_cluster_description
-        ),
+        'cluster_description': cluster_description,
+        'cluster_description_fixed': cluster_description,
         'cluster_headline': cluster_summary.get('headline', ''),
         'cluster_reference_top_features': _get_top_features(cluster_id),
         '주요_소비_항목': {item: f'{v*100:.1f}%' for item, v in top_items},
         '소속확률_top2': [
-            (_build_dynamic_cluster_name(int(i)), round(float(probabilities[i]) * 100, 1))
+            (get_cluster_name(int(i), _auto_labels[int(i)]), round(float(probabilities[i]) * 100, 1))
             for i in top2_idx
         ],
         '전체확률': {
@@ -222,10 +217,6 @@ def print_result(result: dict):
     print(f"  소비 유형 : Cluster {result['cluster_id']} — {result['cluster_name']}")
     print("=" * 55)
     print(f"  유형 설명 : {result['cluster_description']}")
-    if result.get('cluster_name_fixed') and result['cluster_name_fixed'] != result['cluster_name']:
-        print(f"  참고 고정 라벨 : {result['cluster_name_fixed']}")
-    if result.get('cluster_description_fixed') and result['cluster_description_fixed'] != result['cluster_description']:
-        print(f"  참고 기존 설명 : {result['cluster_description_fixed']}")
     print(f"  기준 시그니처 : {result['cluster_signature']}")
     print(f"  🥇 유형 1위 : {result['소속확률_top2'][0][0]}  ({result['소속확률_top2'][0][1]}%)")
     print(f"  🥈 유형 2위 : {result['소속확률_top2'][1][0]}  ({result['소속확률_top2'][1][1]}%)")

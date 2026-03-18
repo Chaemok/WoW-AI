@@ -1,9 +1,9 @@
 [
   {
     "cluster_id": 0,
-    "cluster_name": "장보기·의류형",
+    "cluster_name": "외식·생활잡화형",
     "cluster_signature": "외식(19%) · 음/식료품소매(17%)",
-    "cluster_description": "음/식료품소매를 중심으로 의복/의류와 의약/의료품 지출이 함께 나타나는 생활구매형 유형",
+    "cluster_description": "외식(19%)과 음/식료품소매(17%)가 주축이며, 의복/의류(13%)·의약/의료품(12%) 등 생활 전반에 걸쳐 고르게 지출하는 유형",
     "profile_count": 2,
     "profile_share_pct": 1.52,
     "top_features": [
@@ -69,7 +69,7 @@
     "cluster_id": 1,
     "cluster_name": "사무·서적형",
     "cluster_signature": "사무/교육용품(22%) · 분식(18%)",
-    "cluster_description": "사무/교육용품과 서적/도서 비중이 매우 높고 분식 소비가 함께 나타나는 학습 집중형 유형",
+    "cluster_description": "사무/교육용품(22%)과 서적/도서(11%) 비중이 압도적으로 높고 분식(18%) 소비가 함께 나타나는 학습 집중형 유형",
     "profile_count": 9,
     "profile_share_pct": 6.82,
     "top_features": [
@@ -133,9 +133,9 @@
   },
   {
     "cluster_id": 2,
-    "cluster_name": "화장품·커피형",
+    "cluster_name": "외식·드라이브형",
     "cluster_signature": "외식(20%) · 자동차/유지비(9%)",
-    "cluster_description": "화장품소매와 커피/음료 비중이 두드러지고 외식이 함께 나타나는 취향 소비형 유형",
+    "cluster_description": "외식(20%)이 가장 많고 자동차/유지비(8.5%)·커피/음료(8.4%)가 함께 높은 이동 외향형 소비 유형",
     "profile_count": 20,
     "profile_share_pct": 15.15,
     "top_features": [
@@ -199,9 +199,9 @@
   },
   {
     "cluster_id": 3,
-    "cluster_name": "차량·생활이동형",
+    "cluster_name": "차량·의료관리형",
     "cluster_signature": "자동차/유지비(23%) · 외식(17%)",
-    "cluster_description": "자동차/유지비를 중심으로 외식, 병원/의료, 교육/학원 지출이 함께 붙는 이동 생활형 유형",
+    "cluster_description": "자동차/유지비(23%)가 가장 높고 외식(17%)·병원/의료(11%)·교육/학원(7%)이 함께 나타나는 이동 중심 생활관리형 유형",
     "profile_count": 44,
     "profile_share_pct": 33.33,
     "top_features": [
@@ -265,9 +265,9 @@
   },
   {
     "cluster_id": 4,
-    "cluster_name": "외식·생활관리형",
+    "cluster_name": "외식·의료집중형",
     "cluster_signature": "외식(26%) · 자동차/유지비(17%)",
-    "cluster_description": "외식 비중이 높고 자동차/유지비, 음/식료품소매, 의약/의료품 지출이 함께 나타나는 생활관리형 유형",
+    "cluster_description": "외식(26%)이 최다 지출이며, 자동차/유지비(17%)·음/식료품소매(16%)에 더해 의약/의료품(11%)·병원/의료(11%)까지 높은 생활밀착형 유형",
     "profile_count": 10,
     "profile_share_pct": 7.58,
     "top_features": [
@@ -331,9 +331,9 @@
   },
   {
     "cluster_id": 5,
-    "cluster_name": "의료·의약품 중심형",
+    "cluster_name": "의료·자동차형",
     "cluster_signature": "외식(19%) · 병원/의료(17%)",
-    "cluster_description": "병원/의료와 의약/의료품 비중이 높고 음/식료품소매가 함께 나타나는 건강관리형 유형",
+    "cluster_description": "병원/의료(17%)와 자동차/유지비(16%)가 핵심 지출이고, 외식(19%)·음/식료품소매(13%)가 함께 나타나는 건강·이동 관리형 유형",
     "profile_count": 44,
     "profile_share_pct": 33.33,
     "top_features": [
@@ -399,7 +399,7 @@
     "cluster_id": 6,
     "cluster_name": "교육·선물 특화형",
     "cluster_signature": "교육/학원(22%) · 선물/완구(22%)",
-    "cluster_description": "교육/학원, 선물/완구, 가전제품 소비가 매우 집중된 특화형 유형",
+    "cluster_description": "교육/학원(22%)·선물/완구(22%)·가전제품(20%)이 매우 집중된 특수 목적형 지출 유형",
     "profile_count": 1,
     "profile_share_pct": 0.76,
     "top_features": [
@@ -465,7 +465,7 @@
     "cluster_id": 7,
     "cluster_name": "커피·디저트형",
     "cluster_signature": "커피/음료(46%) · 화장품소매(10%)",
-    "cluster_description": "커피/음료 비중이 매우 높고 화장품소매와 제과/제빵/떡/케익이 함께 나타나는 간식 중심형 유형",
+    "cluster_description": "커피/음료(46%) 비중이 압도적으로 높고 화장품소매(10%)·분식(9%)·제과/제빵(9%)이 함께 나타나는 카페 중심형 유형",
     "profile_count": 2,
     "profile_share_pct": 1.52,
     "top_features": [

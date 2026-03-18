@@ -44,6 +44,17 @@ def decode_csv_bytes(data: bytes) -> str:
     return data.decode('utf-8', errors='replace')
 
 
+def _is_excel_filename(filename: str) -> bool:
+    return Path(filename).suffix.lower() in {'.xls', '.xlsx'}
+
+
+def excel_bytes_to_csv_text(data: bytes, filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    engine = 'xlrd' if suffix == '.xls' else 'openpyxl'
+    df = pd.read_excel(io.BytesIO(data), engine=engine, header=None)
+    return df.to_csv(index=False, header=False)
+
+
 def find_header_row(csv_text: str, header_name: str) -> int:
     for index, line in enumerate(csv_text.splitlines()):
         if line.startswith(f'{header_name},'):
@@ -351,9 +362,17 @@ def api_preprocess_transactions():
     if (bank_file is None or not bank_file.filename) and (card_file is None or not card_file.filename):
         return jsonify({'error': 'bank 또는 card CSV 파일을 하나 이상 업로드해야 합니다.'}), 400
 
+    def _read_file_as_csv_text(f) -> str | None:
+        if not (f and f.filename):
+            return None
+        raw = f.read()
+        if _is_excel_filename(f.filename):
+            return excel_bytes_to_csv_text(raw, f.filename)
+        return decode_csv_bytes(raw)
+
     try:
-        bank_csv_text = decode_csv_bytes(bank_file.read()) if bank_file and bank_file.filename else None
-        card_csv_text = decode_csv_bytes(card_file.read()) if card_file and card_file.filename else None
+        bank_csv_text = _read_file_as_csv_text(bank_file)
+        card_csv_text = _read_file_as_csv_text(card_file)
         transactions = build_transactions(bank_csv_text, card_csv_text)
         payload = build_prediction_state(transactions)
     except Exception as exc:  # pragma: no cover
