@@ -24,6 +24,29 @@ OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
 
+# 가맹점명 키워드 → 카테고리 자동 분류 규칙 (맵에 없는 신규 가맹점에 적용)
+# 순서대로 매칭 시도하며 첫 번째로 맞는 규칙 적용
+KEYWORD_CATEGORY_RULES: list[tuple[str, str]] = [
+    ('카페', '커피/음료'),
+    ('커피', '커피/음료'),
+    ('coffee', '커피/음료'),
+    ('cafe', '커피/음료'),
+    ('베이커리', '제과/제빵'),
+    ('빵', '제과/제빵'),
+    ('bakery', '제과/제빵'),
+    ('편의점', '음/식료품소매'),
+    ('마트', '음/식료품소매'),
+    ('슈퍼', '음/식료품소매'),
+    ('약국', '의약/의료품'),
+    ('병원', '병원/의료'),
+    ('의원', '병원/의료'),
+    ('주유', '자동차/유지비'),
+    ('주차', '자동차/유지비'),
+    ('택시', '교통서비스'),
+    ('버스', '교통서비스'),
+    ('지하철', '교통서비스'),
+]
+
 CATEGORY_HELP = {
     '외식': '한식, 일식/수산물, 별식/퓨전요리, 양식, 중식, 부페를 통합한 입력값이다.',
 }
@@ -272,9 +295,32 @@ def load_override_candidates(limit: int = 120) -> list[dict]:
     return merchant_df[['merchant_name', 'current_category', 'current_reason']].to_dict('records')
 
 
+def _classify_by_keyword(merchant_name: str) -> tuple[str, str] | None:
+    """키워드 규칙으로 카테고리 추론. 매칭되면 (category, reason) 반환, 없으면 None."""
+    name_lower = merchant_name.lower()
+    for keyword, category in KEYWORD_CATEGORY_RULES:
+        if keyword.lower() in name_lower:
+            return category, f'가맹점명에 \'{keyword}\' 키워드가 포함되어 자동 분류됐습니다.'
+    return None
+
+
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
     merchant_map = load_merchant_category_map()
     labeled = transactions.merge(merchant_map, on='merchant_name', how='left')
+
+    # 맵에 없는 가맹점에 키워드 규칙 적용
+    unmatched = labeled['card_tpbuz_nm_2'].isna()
+    if unmatched.any():
+        def _apply_keyword(row):
+            result = _classify_by_keyword(row['merchant_name'])
+            if result:
+                row['card_tpbuz_nm_2'], row['classification_reason'] = result
+            else:
+                row['card_tpbuz_nm_2'] = EXCLUDE_LABEL
+                row['classification_reason'] = '분류 맵에 없는 merchant_name 입니다.'
+            return row
+        labeled.loc[unmatched] = labeled.loc[unmatched].apply(_apply_keyword, axis=1)
+
     labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
     labeled['classification_reason'] = labeled['classification_reason'].fillna('분류 맵에 없는 merchant_name 입니다.')
 
