@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from cluster_definitions import FINAL_CLUSTER_DEFINITIONS, FINAL_CLUSTER_LABELS  # noqa: E402
 from gmm_predict import get_available_categories, predict_spending_type  # noqa: E402
+from spending_advisor import analyze_and_advise  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 DUMMY_CSV_PATH = BASE_DIR / 'dummy_transactions.csv'
@@ -482,6 +483,38 @@ def api_predict():
 def run_demo_server(host: str = '127.0.0.1', port: int = 5000, debug: bool = False):
     """HTML demo server 실행"""
     app.run(host=host, port=port, debug=debug, use_reloader=False)
+
+
+@app.post('/api/advise')
+def api_advise():
+    """CSV 거래 내역 → Qwen2.5-14B 소비 분석 피드백 (chatbot.py 서버 연동)"""
+    payload = request.get_json(silent=True) or {}
+    csv_text = (payload.get('csv_text') or '').strip()
+
+    if not csv_text:
+        return jsonify({'error': 'csv_text가 비어 있습니다.'}), 400
+
+    try:
+        df = pd.read_csv(io.StringIO(csv_text))
+    except Exception as exc:
+        return jsonify({'error': f'CSV 파싱 실패: {exc}'}), 400
+
+    required_cols = {'card_tpbuz_nm_2', 'amt', 'cnt'}
+    missing_cols = sorted(required_cols - set(df.columns))
+    if missing_cols:
+        return jsonify({'error': f'필수 컬럼 누락: {", ".join(missing_cols)}'}), 400
+
+    try:
+        feedback, reduction_dict, cluster_stats = analyze_and_advise(df=df, verbose=False)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+    return jsonify({
+        'feedback': feedback,
+        'reduction_summary': reduction_dict,
+        'total_reduction': sum(reduction_dict.values()),
+        'cluster_stats': cluster_stats,
+    })
 
 
 if __name__ == '__main__':

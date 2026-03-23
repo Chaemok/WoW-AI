@@ -214,102 +214,43 @@ def analyze_and_advise(
         - reduction_dict : {카테고리명: 권장_절감액(원)} 딕셔너리
         - cluster_stats  : 카테고리별 사용자 vs 클러스터 기준 비교 리스트
     """
-    # GMS_KEY 확인
-    gms_key = os.environ.get("GMS_KEY", "").strip()
-    if not gms_key:
-        raise EnvironmentError(
-            "GMS_KEY 환경변수가 설정되지 않았습니다.\n"
-            "루트 .env 파일에 GMS_KEY=<your-gms-key> 를 추가하거나\n"
-            "환경변수를 직접 설정하세요."
-        )
-
-    # openai 임포트 (설치 확인)
-    try:
-        from openai import OpenAI
-    except ImportError:
-        raise ImportError(
-            "openai 패키지가 없습니다.\n"
-            "pip install openai 를 실행하세요."
-        )
-
     # 1) 데이터 로드
     if df is None:
         if csv_path is None:
             raise ValueError("csv_path 또는 df 중 하나를 제공해야 합니다.")
         df = _load_csv(csv_path)
 
-    # 2) 클러스터 예측
-    if verbose:
-        print("🔍  소비 유형 클러스터 분석 중...")
-    user_result = predict_spending_type(df)
-    cluster_id = user_result["cluster_id"]
+    # 2) chatbot.py (Qwen2.5-14B) 에 CSV 전송 → 피드백 수신
+    #    chatbot.py 가 GMM 예측 + Qwen 피드백 + 절감 분석을 모두 담당한다.
+    chatbot_url = os.environ.get("CHATBOT_URL", "http://localhost:8000")
 
     if verbose:
-        print(f"✅  클러스터 {cluster_id}: {user_result.get('cluster_name', '')}")
-        print(f"    {user_result.get('cluster_description', '')}\n")
+        print("🤖  Qwen2.5-14B 피드백 생성 중 (chatbot 서버 호출)...")
 
-    # 3) 카테고리별 실 지출액 집계 (category_map 동일 적용)
-    user_amounts = _user_category_amounts(df)
-    total_amt = sum(user_amounts.values())
+    try:
+        import requests as _requests
+        resp = _requests.post(
+            f"{chatbot_url}/api/analyze",
+            json={"csv_text": df.to_csv(index=False)},
+            timeout=300,
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        raise RuntimeError(
+            f"chatbot 서버 호출 실패: {exc}\n"
+            f"chatbot.py 가 {chatbot_url} 에서 실행 중인지 확인하세요.\n"
+            "실행 명령: python3 chatbot.py"
+        ) from exc
 
-    # 4) 절감 대상 분석
-    reduction_targets = _build_reduction_targets(user_amounts, cluster_id)
-
-    if verbose and reduction_targets:
-        print("📊  과소비 항목 (클러스터 기준 초과):")
-        for t in reduction_targets:
-            print(
-                f"    {t['category']:18s} "
-                f"{t['user_pct']:>5.1f}% vs 클러스터 {t['cluster_pct']:>5.1f}% "
-                f"(+{t['excess_pct']:.1f}%p) → 약 {t['suggested_reduction_amt']:,}원 절감 가능"
-            )
-        print()
-
-    # 5) Gemini 프롬프트 생성 및 호출
-    prompt = _build_prompt(user_result, user_amounts, reduction_targets, total_amt)
+    data = resp.json()
+    feedback: str = data["feedback"]
+    reduction_dict: dict[str, int] = data["reduction_summary"]
+    cluster_stats: list[dict] = data["cluster_stats"]
 
     if verbose:
-        print("🤖  GMS AI 피드백 생성 중...")
-
-    client = OpenAI(
-        api_key=gms_key,
-        base_url="https://gms.ssafy.io/gmsapi/api.openai.com/v1",
-    )
-    response = client.chat.completions.create(
-        model="gpt-5.2",
-        messages=[
-            {"role": "developer", "content": "Answer in Korean. 당신은 한국어로 답변하는 개인 소비 습관 분석 전문가입니다."},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    feedback: str = response.choices[0].message.content
-
-    reduction_dict: dict[str, int] = {
-        t["category"]: t["suggested_reduction_amt"]
-        for t in reduction_targets
-    }
-
-    # 클러스터 기준 비교표 생성 — _cluster_means 에서 전체 카테고리 실제 비율 사용
-    cluster_row = _gp._cluster_means.loc[cluster_id] if cluster_id in _gp._cluster_means.index else None
-    full_cluster_pct_map: dict[str, float] = {}
-    if cluster_row is not None:
-        for feat_col, val in cluster_row.items():
-            cat = str(feat_col).replace("비율_", "")
-            full_cluster_pct_map[cat] = round(float(val) * 100, 1)
-
-    cluster_stats: list[dict] = sorted(
-        [
-            {
-                "category": cat,
-                "user_amt": int(amt),
-                "user_pct": round(amt / total_amt * 100, 1),
-                "cluster_pct": full_cluster_pct_map.get(cat, 0.0),
-                "diff_pct": round(amt / total_amt * 100 - full_cluster_pct_map.get(cat, 0.0), 1),
-            }
-            for cat, amt in user_amounts.items()
-        ],
-        key=lambda x: -x["user_amt"],
-    )
+        cluster_name = data.get("cluster_name", "")
+        cluster_id = data.get("cluster_id", "")
+        print(f"✅  클러스터 {cluster_id}: {cluster_name}\n")
 
     return feedback, reduction_dict, cluster_stats
 
