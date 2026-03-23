@@ -1,23 +1,51 @@
 # 소비 유형 분석 챗봇 서버
 
 Qwen2.5-14B-Instruct (GPU)와 GMM 클러스터 모델을 결합한 개인 소비 분석 챗봇 API 서버.  
-외부 클라이언트(로컬 노트북, 앱 등)에서 HTTP로 호출하여 사용한다.
+/root/workspace/data_analysis 클라이언트(로컬 노트북, 앱 등)에서 HTTP로 호출하여 사용한다.
 
 ---
 
-## 구성
+## 전체 아키텍처
 
 ```
-data_analysis/          ← 이 레포
-├── chatbot.py          # FastAPI 서버 (GPU 서버에서 실행)
-├── client_example.py   # 로컬 클라이언트 예제
-├── README_chatbot.md   # 이 문서
-├── model/
-│   └── gmm_model.pkl
-├── gmm_predict.py
-├── spending_advisor.py
-└── analysis/
-    └── dummy_transactions.csv
+        (노트북 / 브라우저)
+        │
+        ├─ HTTP :5000 ──▶ run_demo.py (Flask 웹 데모 UI)
+        │                       └─ /api/advise
+        │                              └─ spending_advisor.analyze_and_advise()
+        │                                        │
+        └─ HTTP :8000 ──▶ chatbot.py (Flask API 서버, GPU)
+                                ├─ /health
+                                ├─ /api/analyze  ◀─── demo_app + 외부 클라이언트
+                                ├─ /api/chat
+                                └─ /api/session/<id> DELETE
+                                        │
+                                        ├─ GMM 클러스터 예측 (gmm_predict.py)
+                                        └─ Qwen2.5-14B 추론 (GPU, ~28GB VRAM)
+```
+
+---
+
+## 파일 구성
+
+```
+data_analysis/
+ chatbot.py              # Flask API 서버 (GPU 서버에서 실행, :8000)
+ client_example.py       # 로컬 클라이언트 예제
+ README_chatbot.md       # 이 문서
+ run_demo.py             # 웹 데모 서버 진입점 (:5000)
+ spending_advisor.py     # GMM 분석 + chatbot 서버 연동 + 카테고리 매핑
+ gmm_predict.py          # GMM 클러스터 예측
+ gmm_train.py            # GMM 모델 학습 (최초 1회, 원본 데이터 필요)
+ cluster_report.py       # 클러스터 리포트 생성
+ cluster_definitions.py  # 클러스터 라벨/설명 정의
+ model/
+   └── gmm_model.pkl       # 학습된 모델 (gmm_train.py 산출물)
+ analysis/
+    ├── demo_app.py         # 웹 데모 Flask 앱 (:5000)
+    ├── dummy_transactions.csv
+    ├── merchant_category_map.csv   # 가맹점명 → 카테고리 매핑
+    └── user_category_overrides.csv # 사용자 카테고리 수동 오버라이드
 ```
 
 ---
@@ -28,36 +56,78 @@ data_analysis/          ← 이 레포
 |---|---|
 | GPU | NVIDIA A40 (44GB VRAM) |
 | 모델 | `Qwen/Qwen2.5-14B-Instruct` (float16, ~28GB) |
-| 프레임워크 | FastAPI + uvicorn |
+| 프레임워크 | Flask |
 | 서버 IP | `172.16.64.2` |
-| 기본 포트 | `8000` |
+| chatbot 포트 | `8000` |
+| 웹 데모 포트 | `5000` |
 
 ---
 
 ## 서버 실행
 
+### 1. chatbot.py — API 서버 (필수)
+
 ```bash
-git clone https://github.com/sumin-990416/data_analysis.git
 cd data_analysis
 pip install -r requirements.txt
-pip install fastapi uvicorn transformers accelerate sentencepiece
+pip install flask transformers accelerate sentencepiece
 
-python3 chatbot.py                 # 기본: 0.0.0.0:8000
-python3 chatbot.py --port 9000     # 포트 변경
+python3 chatbot.py                  # 기본: 0.0.0.0:8000
+python3 chatbot.py --port 9000      # 포트 변경
+```
+
+.env.example .git .gitattributes .gitignore \=2.0 \=3.0 README.md README_chatbot.md __pycache__ analysis chatbot.py client_example.py cluster_definitions.py cluster_report.py data_analysis gmm_predict.py gmm_train.py model predict.py requirements.txt run_demo.py spending_advisor.py         첫 다운로드 시 약 30GB, 이후 캐시에서 로딩 (~15초).
+
+ 종료 후에도 유지하려면:
+
+```bash
+nohup python3 chatbot.py --host 0.0.0.0 --port 8000 > chatbot.log 2>&1 &
+```
+
+### 2. run_demo.py — 웹 데모 서버 (선택)
+
+chatbot.py가 먼저 실행된 상태에서 별도 터미널로 실행:
+
+```bash
+cd data_analysis
+python3 run_demo.py                 # 0.0.0.0:5000
+```
+
+`CHATBOT_URL` 환경변수로 chatbot 서버 주소를 지정할 수 있다 (기본값: `http://localhost:8000`):
+
+```bash
+CHATBOT_URL=http://172.16.64.2:8000 python3 run_demo.py
 ```
 
 ---
 
-## API 엔드포인트
+## 지원 소비 카테고리
+
+DB `expense_category` 테이블과 일치하는 공식 카테고리 목록.  
+`/api/analyze`, `/api/advise` 요청 시 `card_tpbuz_nm_2` 컬럼값으로 사용한다.
+
+| 카테고리 | 카테고리 | 카테고리 | 카테고리 |
+|---|---|---|---|
+| 인터넷쇼핑 | 인테리어/가정용품 | 교통서비스 | 음/식료품소매 |
+| 외식 | 제과/제빵/떡/케익 | 커피/음료 | 패스트푸드 |
+| 자동차/유지비 | 시스템/통신 | 건강/기호식품 | 분식 |
+| 육류/회식 | 선물/완구 | 병원/의료 | 화장품소매 |
+| 공연관람 | 의약/의료품 | 건강/뷰티/마사지 | 수리서비스 |
+
+> `제과/제빵/떡/케익`은 GMM 내부에서 `제과/제빵`으로 자동 변환됩니다.
+
+---
+
+## API 엔드포인트 (chatbot.py, :8000)
 
 ### `GET /health`
-서버 및 GPU 상태 확인.
+ 및 GPU 상태 확인.
 
 ```bash
 curl http://172.16.64.2:8000/health
 ```
 
-응답:
+:::::
 ```json
 {
   "status": "ok",
@@ -71,8 +141,8 @@ curl http://172.16.64.2:8000/health
 ---
 
 ### `POST /api/analyze`
-거래 내역 CSV를 분석하여 소비 유형 클러스터 분류 + AI 피드백 생성.  
-응답에 포함된 `session_id`로 이후 `/api/chat` 에서 대화를 이어갈 수 있다.
+ 내역 CSV를 분석하여 소비 유형 클러스터 분류 + AI 피드백 생성.  
+ 포함된 `session_id`로 이후 `/api/chat`에서 대화를 이어갈 수 있다.
 
 **요청**
 ```json
@@ -93,7 +163,7 @@ CSV 필수 컬럼:
 
 | 컬럼명 | 의미 |
 |---|---|
-| `card_tpbuz_nm_2` | 업종 소분류 (예: 외식, 커피/음료) |
+| `card_tpbuz_nm_2` | 위 카테고리 목록 중 하나 |
 | `amt` | 결제 금액 (원) |
 | `cnt` | 거래 건수 |
 
@@ -115,7 +185,7 @@ CSV 필수 컬럼:
 ---
 
 ### `POST /api/chat`
-세션 기반 자유 대화. 분석 이후 맥락을 유지하며 추가 질문 가능.
+ 기반 자유 대화. 분석 이후 맥락을 유지하며 추가 질문 가능.
 
 **요청**
 ```json
@@ -140,11 +210,47 @@ CSV 필수 컬럼:
 
 ---
 
-### `DELETE /api/session/{session_id}`
-세션 삭제 (대화 기록 초기화).
+### `DELETE /api/session/<session_id>`
+ 삭제 (대화 기록 초기화).
 
 ```bash
 curl -X DELETE http://172.16.64.2:8000/api/session/9bed598b-...
+```
+
+---
+
+## 웹 데모 엔드포인트 (demo_app.py, :5000)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| `GET` | `/` | 웹 UI |
+| `POST` | `/api/predict` | GMM 클러스터 예측 |
+| `POST` | `/api/advise` | chatbot 서버로 소비 분석 + AI 피드백 요청 |
+| `POST` | `/api/preprocess-transactions` | 거래 CSV/Excel 파일 업로드 → 카테고리 집계 |
+| `GET` | `/api/overrides` | 카테고리 오버라이드 목록 조회 |
+| `POST` | `/api/overrides` | 카테고리 오버라이드 저장 |
+
+`/api/advise` 요청:
+```json
+{
+  "csv_text": "card_tpbuz_nm_2,amt,cnt\n외식,85000,6"
+}
+```
+
+### CSV/Excel 업로드 흐름
+
+```
+ 파일 업로드 (은행/카드 내역)
+    │
+    POST /api/preprocess-transactions  (multipart: bank_file, card_file)
+    │    └─ 가맹점명 → 카테고리 자동 분류 (merchant_category_map.csv)
+    │         └─ 미분류 가맹점: 키워드 규칙 적용
+    │
+    POST /api/predict                  (집계된 csv_text)
+    │    └─ GMM 클러스터 예측
+    │
+    POST /api/advise                   (집계된 csv_text)
+         └─ chatbot.py:8000/api/analyze → Qwen 피드백
 ```
 
 ---
@@ -163,11 +269,6 @@ pip install requests
 SERVER_URL = "http://172.16.64.2:8000"
 ```
 
-실행:
-```bash
-python client_example.py
-```
-
 ### 3. Jupyter Notebook에서 직접 사용
 ```python
 import requests
@@ -179,9 +280,9 @@ r = requests.post(f"{SERVER}/api/analyze", json={"demo": True}, timeout=120)
 result = r.json()
 session_id = result["session_id"]
 
-print(result["cluster_name"])   # 소비 유형
-print(result["feedback"])       # AI 피드백
-print(result["total_reduction"])# 예상 절감액
+print(result["cluster_name"])    # 소비 유형
+print(result["feedback"])        # AI 피드백
+print(result["total_reduction"]) # 예상 절감액
 
 # 이어서 대화
 r2 = requests.post(f"{SERVER}/api/chat",
@@ -190,10 +291,15 @@ r2 = requests.post(f"{SERVER}/api/chat",
 print(r2.json()["reply"])
 ```
 
-### 4. 내 CSV 파일로 분석
+### 4. DB 카테고리로 분석
 ```python
-with open("my_transactions.csv", encoding="utf-8") as f:
-    csv_text = f.read()
+# DB expense_category 기준으로 집계한 데이터 전달
+csv_text = """card_tpbuz_nm_2,amt,cnt
+/root/workspace/data_analysis85000,6
+exit/음료,42000,14
+exit/제빵/떡/케익,18000,3
+exit,55000,2
+"""
 
 r = requests.post(f"{SERVER}/api/analyze",
     json={"csv_text": csv_text}, timeout=120)
@@ -207,8 +313,11 @@ result = r.json()
 SSH 터널링으로 우회:
 ```bash
 # 로컬 터미널에서 실행
-ssh -L 8000:localhost:8000 user@172.16.64.2
+ssh -L 8000:localhost:8000 -L 5000:localhost:5000 user@172.16.64.2
 
 # 이후 로컬에서 아래 주소로 접근
-SERVER_URL = "http://localhost:8000"
+# chatbot API:  http://localhost:8000
+# 웹 데모 UI:   http://localhost:5000
 ```
+
+AWS EC2라면 보안 그룹에서 8000, 5000 포트 인바운드 규칙 추가 필요.
