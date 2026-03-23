@@ -53,10 +53,15 @@ def _load_csv(path: str) -> pd.DataFrame:
 
 
 def _user_category_amounts(df: pd.DataFrame) -> dict[str, float]:
-    """cnt > 0 거래만 사용해 카테고리별 실 지출 금액 계산"""
+    """cnt > 0 거래만 사용해 카테고리별 실 지출 금액 계산.
+    DB 카테고리명이 들어오면 GMM 내부명으로 정규화한 뒤 통폐합 맵 적용.
+    """
     valid = df[df["cnt"] > 0].copy()
-    # gmm_predict 의 category_map(통폐합) 동일 적용
-    valid = valid.copy()
+    # DB 카테고리 → GMM 내부 카테고리 정규화 먼저
+    valid["card_tpbuz_nm_2"] = valid["card_tpbuz_nm_2"].map(
+        lambda x: _DB_TO_GMM.get(x, x)
+    )
+    # gmm_predict 의 category_map(통폐합) 적용
     valid["refined_category"] = valid["card_tpbuz_nm_2"].map(
         lambda x: _gp._category_map.get(x, x)
     )
@@ -118,21 +123,51 @@ def _build_reduction_targets(
     return sorted(targets, key=lambda x: -x["excess_pct"])
 
 
+
+# DB의 expense_category 테이블과 일치하는 공식 카테고리 목록
+EXPENSE_CATEGORIES: list[str] = [
+    "인터넷쇼핑", "인테리어/가정용품", "교통서비스", "음/식료품소매",
+    "외식", "제과/제빵/떡/케익", "커피/음료", "패스트푸드",
+    "자동차/유지비", "시스템/통신", "건강/기호식품", "분식",
+    "육류/회식", "선물/완구", "병원/의료", "화장품소매",
+    "공연관람", "의약/의료품", "건강/뷰티/마사지", "수리서비스",
+]
+
+# DB 카테고리 → GMM 내부 카테고리 매핑 (이름이 다른 것만)
+_DB_TO_GMM: dict[str, str] = {
+    "제과/제빵/떡/케익": "제과/제빵",
+    "건강/기호식품":     "건강/기호식품",  # GMM에 없으면 그대로 사용
+}
+
+# GMM 내부 카테고리 → DB 카테고리 역매핑 (피드백 표시용)
+_GMM_TO_DB: dict[str, str] = {v: k for k, v in _DB_TO_GMM.items() if k != v}
+
+
+def normalize_to_gmm(category: str) -> str:
+    """DB 카테고리명 → GMM 내부 카테고리명으로 변환"""
+    return _DB_TO_GMM.get(category, category)
+
+
+def normalize_to_db(category: str) -> str:
+    """GMM 내부 카테고리명 → DB 카테고리명으로 변환 (피드백 표시용)"""
+    return _GMM_TO_DB.get(category, category)
+
+
 def _build_prompt(
     user_result: dict,
     user_amounts: dict[str, float],
     reduction_targets: list[dict],
     total_amt: float,
 ) -> str:
-    """Gemini 에 보낼 분석 프롬프트 생성"""
+    """Qwen2.5-14B 에 보낼 분석 프롬프트 생성"""
 
     cluster_name = user_result.get("cluster_name", "")
     cluster_desc = user_result.get("cluster_description", "")
     top2 = user_result.get("소속확률_top2", [])
 
-    # 사용자 소비 현황 텍스트
+    # 사용자 소비 현황 텍스트 (DB 카테고리명으로 표시)
     breakdown_lines = "\n".join(
-        f"  - {cat}: {int(amt):,}원 ({round(amt / total_amt * 100, 1)}%)"
+        f"  - {normalize_to_db(cat)}: {int(amt):,}원 ({round(amt / total_amt * 100, 1)}%)"
         for cat, amt in sorted(user_amounts.items(), key=lambda x: -x[1])
     )
 
@@ -141,10 +176,10 @@ def _build_prompt(
     if top2:
         prob_text = f"\n(소속 확률 1위: {top2[0][0]} {top2[0][1]}%)"
 
-    # 절감 대상 텍스트
+    # 절감 대상 텍스트 (DB 카테고리명으로 표시)
     if reduction_targets:
         reduction_lines = "\n".join(
-            f"  - {t['category']}: "
+            f"  - {normalize_to_db(t['category'])}: "
             f"사용자 {t['user_pct']}% vs 클러스터 기준 {t['cluster_pct']:.1f}% "
             f"(+{t['excess_pct']}%p 초과) → 약 {t['suggested_reduction_amt']:,}원 절감 가능"
             for t in reduction_targets
@@ -152,11 +187,17 @@ def _build_prompt(
     else:
         reduction_lines = "  - 클러스터 평균 대비 크게 초과하는 항목이 없습니다."
 
+    # 공식 카테고리 목록 (AI 참조용)
+    category_list = ", ".join(EXPENSE_CATEGORIES)
+
     prompt = f"""당신은 개인 소비 습관 분석 전문가입니다.
 아래 데이터를 바탕으로 이 사람의 소비 생활 전반에 대한 종합적인 피드백을 한국어로 작성해주세요.
 항목별 나열이 아니라, 이 사람의 소비 패턴이 어떤 삶의 방식을 반영하는지, 어떤 방향으로 바꿔가면 좋을지를 중심으로 서술해주세요.
 
 ---
+## 지원 소비 카테고리 (아래 분류명만 사용할 것)
+{category_list}
+
 ## 사용자 소비 유형
 - 클러스터 이름: {cluster_name}{prob_text}
 - 유형 설명: {cluster_desc}
@@ -170,6 +211,7 @@ def _build_prompt(
 
 ## 작성 요청
 아래 구조에 맞춰 마크다운으로 작성해주세요.
+카테고리명을 언급할 때는 반드시 위 "지원 소비 카테고리" 목록에 있는 이름을 그대로 사용해주세요.
 
 ### 1. 소비 패턴 진단
 숫자 나열 없이, 이 사람이 어떤 소비 습관을 가진 사람인지 2~3문장으로 묘사해주세요.
