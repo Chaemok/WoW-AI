@@ -4,7 +4,7 @@
 [역할]
   - Qwen2.5-14B-Instruct (로컬 GPU)로 대화
   - data_analysis 레포의 GMM 모델 연동
-  - FastAPI HTTP 서버로 외부 클라이언트에 서빙
+  - Flask HTTP 서버로 외부 클라이언트에 서빙
 
 [실행]
   python chatbot.py            (기본: 0.0.0.0:8000)
@@ -27,15 +27,10 @@ import sys
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
-
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import uvicorn
+from flask import Flask, request, jsonify
 
 # 레포 루트 (chatbot.py 와 같은 디렉토리)
 DATA_ANALYSIS_ROOT = Path(__file__).resolve().parent
@@ -62,45 +57,10 @@ tokenizer = None
 model = None
 
 # ─────────────────────────────────────────────────────────────
-# FastAPI 앱
+# Flask 앱
 # ─────────────────────────────────────────────────────────────
-app = FastAPI(title="소비 유형 분석 챗봇 API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ─────────────────────────────────────────────────────────────
-# 요청/응답 스키마
-# ─────────────────────────────────────────────────────────────
-class AnalyzeRequest(BaseModel):
-    csv_text: Optional[str] = None   # CSV 문자열 (헤더 포함)
-    demo: bool = False               # True면 더미 데이터 사용
-    session_id: Optional[str] = None # 기존 세션 이어가기 (없으면 신규 생성)
-
-
-class AnalyzeResponse(BaseModel):
-    session_id: str
-    cluster_id: int
-    cluster_name: str
-    feedback: str
-    cluster_stats: list[dict]
-    reduction_summary: dict[str, int]
-    total_reduction: int
-
-
-class ChatRequest(BaseModel):
-    message: str
-    session_id: Optional[str] = None  # 없으면 신규 세션 생성
-
-
-class ChatResponse(BaseModel):
-    session_id: str
-    reply: str
+app = Flask(__name__)
+app.config["JSON_AS_ASCII"] = False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -223,34 +183,38 @@ def health():
     }
 
 
-@app.post("/api/analyze", response_model=AnalyzeResponse)
-def analyze(req: AnalyzeRequest):
+@app.route("/api/analyze", methods=["POST"])
+def analyze():
+    body = request.get_json(force=True) or {}
+    demo = body.get("demo", False)
+    csv_text = body.get("csv_text")
+    sid = body.get("session_id") or str(uuid.uuid4())
+
     # 데이터 로드
-    if req.demo:
+    if demo:
         if _DUMMY_CSV_PATH.exists():
             df = pd.read_csv(_DUMMY_CSV_PATH)
         else:
             df = _DEMO_DF.copy()
-    elif req.csv_text:
+    elif csv_text:
         import io
         try:
-            df = pd.read_csv(io.StringIO(req.csv_text))
+            df = pd.read_csv(io.StringIO(csv_text))
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"CSV 파싱 오류: {e}")
+            return jsonify({"error": f"CSV 파싱 오류: {e}"}), 400
         required = {"card_tpbuz_nm_2", "amt", "cnt"}
         missing = required - set(df.columns)
         if missing:
-            raise HTTPException(status_code=400, detail=f"필수 컬럼 누락: {', '.join(sorted(missing))}")
+            return jsonify({"error": f"필수 컬럼 누락: {', '.join(sorted(missing))}"}), 400
     else:
-        raise HTTPException(status_code=400, detail="csv_text 또는 demo=true 중 하나를 제공하세요.")
+        return jsonify({"error": "csv_text 또는 demo=true 중 하나를 제공하세요."}), 400
 
     try:
         prompt, cluster_id, cluster_name, reduction_dict, cluster_stats = run_analysis(df)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"분석 오류: {e}")
+        return jsonify({"error": f"분석 오류: {e}"}), 500
 
     # 세션 생성 또는 이어가기
-    sid = req.session_id or str(uuid.uuid4())
     if sid not in sessions:
         sessions[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
@@ -258,39 +222,41 @@ def analyze(req: AnalyzeRequest):
     feedback = generate(sessions[sid], max_new_tokens=1024)
     sessions[sid].append({"role": "assistant", "content": feedback})
 
-    return AnalyzeResponse(
-        session_id=sid,
-        cluster_id=cluster_id,
-        cluster_name=cluster_name,
-        feedback=feedback,
-        cluster_stats=cluster_stats,
-        reduction_summary=reduction_dict,
-        total_reduction=sum(reduction_dict.values()),
-    )
+    return jsonify({
+        "session_id": sid,
+        "cluster_id": cluster_id,
+        "cluster_name": cluster_name,
+        "feedback": feedback,
+        "cluster_stats": cluster_stats,
+        "reduction_summary": reduction_dict,
+        "total_reduction": sum(reduction_dict.values()),
+    })
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
-    if not req.message.strip():
-        raise HTTPException(status_code=400, detail="message가 비어있습니다.")
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    body = request.get_json(force=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "message가 비어있습니다."}), 400
 
-    sid = req.session_id or str(uuid.uuid4())
+    sid = body.get("session_id") or str(uuid.uuid4())
     if sid not in sessions:
         sessions[sid] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    sessions[sid].append({"role": "user", "content": req.message})
+    sessions[sid].append({"role": "user", "content": message})
     reply = generate(sessions[sid], max_new_tokens=512)
     sessions[sid].append({"role": "assistant", "content": reply})
 
-    return ChatResponse(session_id=sid, reply=reply)
+    return jsonify({"session_id": sid, "reply": reply})
 
 
-@app.delete("/api/session/{session_id}")
-def delete_session(session_id: str):
+@app.route("/api/session/<session_id>", methods=["DELETE"])
+def delete_session(session_id):
     if session_id not in sessions:
-        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+        return jsonify({"error": "세션을 찾을 수 없습니다."}), 404
     del sessions[session_id]
-    return {"message": f"세션 {session_id} 삭제됨"}
+    return jsonify({"message": f"세션 {session_id} 삭제됨"})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -303,5 +269,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     load_model()
-    uvicorn.run(app, host=args.host, port=args.port)
+    app.run(host=args.host, port=args.port)
 
