@@ -114,6 +114,20 @@ curl -X POST http://127.0.0.1:8000/api/analyze \
   }'
 ```
 
+### 스모크 테스트 스크립트
+
+배포 직후 한 번에 상태와 분석 호출을 확인하려면 아래 스크립트를 사용한다.
+
+```bash
+python smoke_test_api.py --server-url http://127.0.0.1:8000
+```
+
+이 스크립트는 아래 순서로 동작한다.
+
+- `GET /health`
+- `POST /api/analyze`
+- 핵심 응답 요약 출력
+
 ## 6. 백엔드 연동 기준
 
 Runpod에 올라간 AI 서버는 내부적으로 아래 엔드포인트를 제공한다.
