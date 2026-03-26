@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -36,9 +37,17 @@ KEYWORD_CATEGORY_RULES: list[tuple[str, str]] = [
     ('베이커리', '제과/제빵'),
     ('빵', '제과/제빵'),
     ('bakery', '제과/제빵'),
+    ('바게뜨', '제과/제빵'),
+    ('파리바게뜨', '제과/제빵'),
     ('편의점', '음/식료품소매'),
     ('마트', '음/식료품소매'),
     ('슈퍼', '음/식료품소매'),
+    ('gs25', '음/식료품소매'),
+    ('cu', '음/식료품소매'),
+    ('세븐일레븐', '음/식료품소매'),
+    ('이마트24', '음/식료품소매'),
+    ('다이소', '인테리어/가정용품'),
+    ('올리브영', '화장품소매'),
     ('약국', '의약/의료품'),
     ('병원', '병원/의료'),
     ('의원', '병원/의료'),
@@ -48,6 +57,21 @@ KEYWORD_CATEGORY_RULES: list[tuple[str, str]] = [
     ('버스', '교통서비스'),
     ('지하철', '교통서비스'),
 ]
+
+# 소비처가 아닌 금융성/이체성 거래는 제외를 유지해야 한다.
+# 다만 merchant map에 잘못 누적된 "제외"가 많아서, 명백한 소비처 키워드가 있는 경우에는
+# 아래 키워드 규칙으로 다시 살려낼 수 있게 한다.
+FINANCIAL_EXCLUDE_KEYWORDS: tuple[str, ...] = (
+    '충전',
+    '이체',
+    '수수료',
+    '카드대금',
+    '카드사용알림서비스',
+    '자동이체',
+    '계좌이체',
+    '송금',
+    '결제대행',
+)
 
 CATEGORY_HELP = {
     '외식': '한식, 일식/수산물, 별식/퓨전요리, 양식, 중식, 부페를 통합한 입력값이다.',
@@ -80,6 +104,26 @@ def excel_bytes_to_csv_text(data: bytes, filename: str) -> str:
     return df.to_csv(index=False, header=False)
 
 
+def _normalize_merchant_key(value: str) -> str:
+    """상호명을 머지 키 용도로 정규화한다.
+
+    엑셀 원본은 공백, 법인 표기, 특수문자 차이 때문에 같은 상호가 다르게 들어오는 일이 많다.
+    merchant map exact match 실패를 줄이기 위해 비교용 키를 별도로 만든다.
+    """
+    text = str(value or '').strip().lower()
+    if not text:
+        return ''
+
+    text = text.replace('(주)', '').replace('㈜', '').replace('주식회사', '')
+    text = re.sub(r'[\s\-_()/.,·]+', '', text)
+    return text
+
+
+def _has_financial_exclude_signal(merchant_name: str) -> bool:
+    name = str(merchant_name or '')
+    return any(keyword in name for keyword in FINANCIAL_EXCLUDE_KEYWORDS)
+
+
 def find_header_row(csv_text: str, header_name: str) -> int:
     for index, line in enumerate(csv_text.splitlines()):
         if line.startswith(f'{header_name},'):
@@ -99,6 +143,7 @@ def load_bank_transactions_from_text(csv_text: str) -> pd.DataFrame:
     bank = bank[bank['transaction_datetime'].notna()].copy()
     bank['payment_method'] = bank['적요'].map(lambda value: '카드' if value in CARD_LIKE_TYPES else '계좌')
     bank['merchant_name'] = bank['내용'].fillna('').astype(str).str.strip()
+    bank['merchant_key'] = bank['merchant_name'].map(_normalize_merchant_key)
     bank['transaction_detail'] = bank['적요'].fillna('').astype(str).str.strip()
     bank['amount'] = bank['출금(원)'].astype(int)
     bank['source'] = 'bank'
@@ -108,6 +153,7 @@ def load_bank_transactions_from_text(csv_text: str) -> pd.DataFrame:
         'payment_method',
         'amount',
         'merchant_name',
+        'merchant_key',
         'transaction_detail',
         'source',
         'source_order',
@@ -130,6 +176,7 @@ def load_card_transactions_from_text(csv_text: str) -> pd.DataFrame:
     card = card[card['transaction_datetime'].notna()].copy()
     card['payment_method'] = '카드'
     card['merchant_name'] = card['가맹점명'].fillna('').astype(str).str.strip()
+    card['merchant_key'] = card['merchant_name'].map(_normalize_merchant_key)
     card['transaction_detail'] = card['상품구분'].fillna('').astype(str).str.strip()
     card['amount'] = card['이용금액'].astype(int)
     card['source'] = 'card'
@@ -139,6 +186,7 @@ def load_card_transactions_from_text(csv_text: str) -> pd.DataFrame:
         'payment_method',
         'amount',
         'merchant_name',
+        'merchant_key',
         'transaction_detail',
         'source',
         'source_order',
@@ -188,9 +236,10 @@ def load_user_overrides() -> pd.DataFrame:
     override_df = override_df[OVERRIDE_COLUMNS].copy()
     for column in OVERRIDE_COLUMNS:
         override_df[column] = override_df[column].fillna('').astype(str).str.strip()
+    override_df['merchant_key'] = override_df['merchant_name'].map(_normalize_merchant_key)
 
-    override_df = override_df.loc[override_df['merchant_name'].ne('')].drop_duplicates(
-        subset=['merchant_name'], keep='last'
+    override_df = override_df.loc[override_df['merchant_key'].ne('')].drop_duplicates(
+        subset=['merchant_key'], keep='last'
     )
     return override_df.reset_index(drop=True)
 
@@ -208,11 +257,30 @@ def load_merchant_category_map() -> pd.DataFrame:
 
     merchant_df = merchant_df[expected_columns].copy()
     merchant_df['merchant_name'] = merchant_df['merchant_name'].fillna('').astype(str).str.strip()
+    merchant_df['merchant_key'] = merchant_df['merchant_name'].map(_normalize_merchant_key)
     merchant_df['card_tpbuz_nm_2'] = merchant_df['card_tpbuz_nm_2'].fillna('').astype(str).str.strip()
     merchant_df['classification_reason'] = merchant_df['classification_reason'].fillna('').astype(str).str.strip()
-    merchant_df = merchant_df.loc[merchant_df['merchant_name'].ne('')].drop_duplicates(
-        subset=['merchant_name'], keep='last'
+    merchant_df = merchant_df.loc[merchant_df['merchant_key'].ne('')].drop_duplicates(
+        subset=['merchant_key'], keep='last'
     )
+
+    # 과거 merchant map에는 잘못 누적된 "제외"가 섞여 있다.
+    # 명백한 소비처 키워드가 보이면 제외를 그대로 믿지 말고 다시 소비 카테고리로 복구한다.
+    exclude_mask = merchant_df['card_tpbuz_nm_2'].eq(EXCLUDE_LABEL)
+    for idx in merchant_df.index[exclude_mask]:
+        merchant_name = merchant_df.at[idx, 'merchant_name']
+        if _has_financial_exclude_signal(merchant_name):
+            continue
+
+        keyword_result = _classify_by_keyword(merchant_name)
+        if keyword_result is None:
+            continue
+
+        repaired_category, repaired_reason = keyword_result
+        merchant_df.at[idx, 'card_tpbuz_nm_2'] = repaired_category
+        merchant_df.at[idx, 'classification_reason'] = (
+            f"기존 exclude merchant map을 재검토해 소비처로 복구했습니다. {repaired_reason}"
+        )
 
     override_df = load_user_overrides()
     if override_df.empty:
@@ -228,15 +296,15 @@ def load_merchant_category_map() -> pd.DataFrame:
         '', '사용자 지정 카테고리 재설정입니다.'
     )
 
-    merged = merchant_df.set_index('merchant_name')
-    merged.update(override_df.set_index('merchant_name'))
+    merged = merchant_df.set_index('merchant_key')
+    merged.update(override_df.set_index('merchant_key'))
     merged = merged.reset_index()
 
-    missing_override = override_df.loc[~override_df['merchant_name'].isin(merged['merchant_name'])]
+    missing_override = override_df.loc[~override_df['merchant_key'].isin(merged['merchant_key'])]
     if not missing_override.empty:
         merged = pd.concat([merged, missing_override], ignore_index=True)
 
-    return merged.drop_duplicates(subset=['merchant_name'], keep='last').reset_index(drop=True)
+    return merged.drop_duplicates(subset=['merchant_key'], keep='last').reset_index(drop=True)
 
 
 def save_user_overrides(rows: list[dict]) -> pd.DataFrame:
@@ -284,9 +352,10 @@ def load_override_candidates(limit: int = 120) -> list[dict]:
         }
     )
     merchant_df['merchant_name'] = merchant_df['merchant_name'].fillna('').astype(str).str.strip()
+    merchant_df['merchant_key'] = merchant_df['merchant_name'].map(_normalize_merchant_key)
     merchant_df['current_category'] = merchant_df['current_category'].fillna('').astype(str).str.strip()
     merchant_df['current_reason'] = merchant_df['current_reason'].fillna('').astype(str).str.strip()
-    merchant_df = merchant_df.loc[merchant_df['merchant_name'].ne('')]
+    merchant_df = merchant_df.loc[merchant_df['merchant_key'].ne('')]
 
     merchant_df['priority'] = merchant_df['current_category'].eq('제외').astype(int)
     merchant_df = merchant_df.sort_values(
@@ -300,15 +369,19 @@ def load_override_candidates(limit: int = 120) -> list[dict]:
 def _classify_by_keyword(merchant_name: str) -> tuple[str, str] | None:
     """키워드 규칙으로 카테고리 추론. 매칭되면 (category, reason) 반환, 없으면 None."""
     name_lower = merchant_name.lower()
+    merchant_key = _normalize_merchant_key(merchant_name)
     for keyword, category in KEYWORD_CATEGORY_RULES:
-        if keyword.lower() in name_lower:
+        normalized_keyword = _normalize_merchant_key(keyword)
+        if keyword.lower() in name_lower or (normalized_keyword and normalized_keyword in merchant_key):
             return category, f'가맹점명에 \'{keyword}\' 키워드가 포함되어 자동 분류됐습니다.'
     return None
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
     merchant_map = load_merchant_category_map()
-    labeled = transactions.merge(merchant_map, on='merchant_name', how='left')
+    labeled = transactions.merge(merchant_map, on='merchant_key', how='left', suffixes=('', '_mapped'))
+    if 'merchant_name_mapped' in labeled.columns:
+        labeled = labeled.drop(columns=['merchant_name_mapped'])
 
     # 맵에 없는 가맹점에 키워드 규칙 적용
     unmatched = labeled['card_tpbuz_nm_2'].isna()
