@@ -18,7 +18,8 @@ openpyxl==3.1.5
 xlrd==2.0.2
 
 # LLM 추론
-transformers>=4.47.1,<6
+# Runpod PyTorch 템플릿(torch 2.4.x)과의 호환성을 위해 transformers는 4.x로 고정한다.
+transformers>=4.47.1,<5
 accelerate==1.13.0
 bitsandbytes
 sentencepiece==0.2.1
