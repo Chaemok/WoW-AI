@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 스크립트 위치를 기준으로 프로젝트 루트로 이동한다.
+# 현재 스크립트 위치를 기준으로 프로젝트 루트를 고정한다.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
 ENV_FILE="${ENV_FILE:-.env}"
+
 CALLER_VENV_DIR="${VENV_DIR-}"
 CALLER_HOST="${HOST-}"
 CALLER_PORT="${PORT-}"
@@ -28,8 +29,9 @@ CALLER_HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET-}"
 CALLER_HF_HUB_OFFLINE="${HF_HUB_OFFLINE-}"
 CALLER_TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE-}"
 CALLER_USE_SYSTEM_SITE_PACKAGES="${USE_SYSTEM_SITE_PACKAGES-}"
+CALLER_USE_LOCAL_SNAPSHOT="${USE_LOCAL_SNAPSHOT-}"
+CALLER_PYTHONUNBUFFERED="${PYTHONUNBUFFERED-}"
 
-# .env가 있으면 먼저 읽고, 호출 시 넘긴 환경변수는 다시 우선 적용한다.
 if [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1090
@@ -59,10 +61,13 @@ HF_HUB_DISABLE_XET="${CALLER_HF_HUB_DISABLE_XET:-${HF_HUB_DISABLE_XET:-1}}"
 HF_HUB_OFFLINE="${CALLER_HF_HUB_OFFLINE:-${HF_HUB_OFFLINE:-0}}"
 TRANSFORMERS_OFFLINE="${CALLER_TRANSFORMERS_OFFLINE:-${TRANSFORMERS_OFFLINE:-0}}"
 USE_SYSTEM_SITE_PACKAGES="${CALLER_USE_SYSTEM_SITE_PACKAGES:-${USE_SYSTEM_SITE_PACKAGES:-}}"
+USE_LOCAL_SNAPSHOT="${CALLER_USE_LOCAL_SNAPSHOT:-${USE_LOCAL_SNAPSHOT:-1}}"
+PYTHONUNBUFFERED="${CALLER_PYTHONUNBUFFERED:-${PYTHONUNBUFFERED:-1}}"
 
 export HOST PORT MODEL_ID LOAD_IN_4BIT ANALYZE_MAX_NEW_TOKENS CHAT_MAX_NEW_TOKENS
 export HF_HOME TRANSFORMERS_CACHE XDG_CACHE_HOME PIP_CACHE_DIR PIP_NO_CACHE_DIR
 export TMPDIR TMP TEMP HF_HUB_DISABLE_XET HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
+export USE_LOCAL_SNAPSHOT PYTHONUNBUFFERED
 
 PID_FILE="$LOG_DIR/chatbot.pid"
 OUT_LOG="$LOG_DIR/chatbot.out.log"
@@ -76,9 +81,41 @@ if [ -z "$USE_SYSTEM_SITE_PACKAGES" ] && [ "$REQUIREMENTS_FILE" = "requirements-
   USE_SYSTEM_SITE_PACKAGES=1
 fi
 
-mkdir -p "$LOG_DIR"
-mkdir -p "$APP_CACHE_DIR"
-mkdir -p "$TMPDIR"
+mkdir -p "$LOG_DIR" "$APP_CACHE_DIR" "$TMPDIR"
+
+resolve_snapshot_dir() {
+  local repo_id="$1"
+  local repo_cache_dir="$HF_HOME/models--${repo_id//\//--}"
+  local snapshots_dir="$repo_cache_dir/snapshots"
+  local latest_snapshot=""
+
+  if [ ! -d "$snapshots_dir" ]; then
+    return 1
+  fi
+
+  latest_snapshot="$(
+    find "$snapshots_dir" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' 2>/dev/null \
+      | sort -nr \
+      | head -n 1 \
+      | cut -d' ' -f2-
+  )"
+
+  if [ -z "$latest_snapshot" ] || [ ! -d "$latest_snapshot" ]; then
+    return 1
+  fi
+
+  printf '%s\n' "$latest_snapshot"
+}
+
+# Runpod에서는 미리 받은 snapshot을 바로 쓰는 편이 더 안정적이다.
+if [ "$USE_LOCAL_SNAPSHOT" = "1" ] && [ ! -d "$MODEL_ID" ] && [[ "$MODEL_ID" == */* ]]; then
+  if SNAPSHOT_DIR="$(resolve_snapshot_dir "$MODEL_ID")"; then
+    MODEL_ID="$SNAPSHOT_DIR"
+    HF_HUB_OFFLINE=1
+    TRANSFORMERS_OFFLINE=1
+    export MODEL_ID HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
+  fi
+fi
 
 if [ -f "$PID_FILE" ]; then
   EXISTING_PID="$(cat "$PID_FILE")"
@@ -99,7 +136,6 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   fi
 fi
 
-# 가상환경을 활성화하고 필요한 패키지를 설치한다.
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r "$REQUIREMENTS_FILE"
@@ -111,11 +147,27 @@ echo "[INFO] LOAD_IN_4BIT=$LOAD_IN_4BIT"
 echo "[INFO] REQUIREMENTS_FILE=$REQUIREMENTS_FILE"
 echo "[INFO] HF_HOME=$HF_HOME"
 echo "[INFO] TMPDIR=$TMPDIR"
+echo "[INFO] HF_HUB_OFFLINE=$HF_HUB_OFFLINE"
+echo "[INFO] TRANSFORMERS_OFFLINE=$TRANSFORMERS_OFFLINE"
+echo "[INFO] USE_LOCAL_SNAPSHOT=$USE_LOCAL_SNAPSHOT"
 echo "[INFO] OUT_LOG=$OUT_LOG"
 echo "[INFO] ERR_LOG=$ERR_LOG"
 
-nohup python chatbot.py --host "$HOST" --port "$PORT" >"$OUT_LOG" 2>"$ERR_LOG" &
+nohup python -u chatbot.py --host "$HOST" --port "$PORT" >"$OUT_LOG" 2>"$ERR_LOG" &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$PID_FILE"
 
+sleep 2
+if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+  echo "[ERROR] 백그라운드 프로세스가 바로 종료되었습니다."
+  echo "[ERROR] 최근 OUT_LOG:"
+  tail -n 40 "$OUT_LOG" 2>/dev/null || true
+  echo "[ERROR] 최근 ERR_LOG:"
+  tail -n 40 "$ERR_LOG" 2>/dev/null || true
+  rm -f "$PID_FILE"
+  exit 1
+fi
+
 echo "[INFO] 시작 완료. PID=$SERVER_PID"
+echo "[INFO] 14B는 모델 로딩까지 1~2분 정도 걸릴 수 있습니다."
+echo "[INFO] 준비 상태 확인: ./status_chatbot_linux.sh"

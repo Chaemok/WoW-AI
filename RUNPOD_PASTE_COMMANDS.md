@@ -24,13 +24,17 @@ export TMP=$APP_CACHE_DIR/tmp
 export TEMP=$APP_CACHE_DIR/tmp
 export HF_HUB_DISABLE_XET=1
 hf download Qwen/Qwen2.5-14B-Instruct --cache-dir /workspace/WoW-AI/.cache/huggingface
-SNAPSHOT_DIR="$(find /workspace/WoW-AI/.cache/huggingface/models--Qwen--Qwen2.5-14B-Instruct/snapshots -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-export MODEL_ID="$SNAPSHOT_DIR"
-export LOAD_IN_4BIT=0
-export HF_HUB_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-python chatbot.py --host 0.0.0.0 --port 8000
+sed -i 's#^MODEL_ID=.*#MODEL_ID=Qwen/Qwen2.5-14B-Instruct#' .env
+sed -i 's#^LOAD_IN_4BIT=.*#LOAD_IN_4BIT=0#' .env
+./start_chatbot_background_linux.sh
+./status_chatbot_linux.sh
+curl http://127.0.0.1:8000/health
 ```
+
+참고:
+
+- background 스크립트는 local snapshot이 있으면 자동으로 snapshot 경로를 사용한다
+- health가 바로 안 열리면 모델 로딩 중일 수 있으니 `1~2분` 정도 기다린 뒤 다시 확인한다
 
 ## 2. 로그 확인
 
@@ -57,24 +61,13 @@ python smoke_test_api.py --server-url http://127.0.0.1:8000
 cd /workspace/WoW-AI
 git pull origin chaemok
 source .venv/bin/activate
-export APP_CACHE_DIR=/workspace/WoW-AI/.cache
-export XDG_CACHE_HOME=$APP_CACHE_DIR
-export HF_HOME=$APP_CACHE_DIR/huggingface
-export TRANSFORMERS_CACHE=$APP_CACHE_DIR/huggingface
-export TMPDIR=$APP_CACHE_DIR/tmp
-export TMP=$APP_CACHE_DIR/tmp
-export TEMP=$APP_CACHE_DIR/tmp
-export HF_HUB_DISABLE_XET=1
-SNAPSHOT_DIR="$(find /workspace/WoW-AI/.cache/huggingface/models--Qwen--Qwen2.5-14B-Instruct/snapshots -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-export MODEL_ID="$SNAPSHOT_DIR"
-export LOAD_IN_4BIT=0
-export HF_HUB_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-python chatbot.py --host 0.0.0.0 --port 8000
+./stop_chatbot_linux.sh
+./start_chatbot_background_linux.sh
+./status_chatbot_linux.sh
 ```
 
 ## 5. 서버 중지
 
 ```bash
-pkill -f "python chatbot.py" || true
+./stop_chatbot_linux.sh
 ```
