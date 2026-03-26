@@ -136,3 +136,25 @@ class GMSCategoryClassifier:
             "Return JSON only.\n"
             '{"category":"...", "confidence":0.0, "reason":"..."}'
         )
+
+
+EXCLUDE_LABEL = "제외"
+
+
+def _patched_build_system_prompt(self: GMSCategoryClassifier) -> str:
+    categories = "\n".join(f"- {category}" for category in self.allowed_categories)
+    return (
+        "You classify one transaction into exactly one allowed category.\n"
+        "Use merchant_name as the strongest signal.\n"
+        "Use transaction_detail, payment_method, and amount only as supporting hints.\n"
+        "If the merchant is too ambiguous, return '제외'.\n"
+        "Do not invent new categories.\n\n"
+        "[Allowed categories]\n"
+        f"{categories}\n"
+        f"- {EXCLUDE_LABEL}\n\n"
+        "Return JSON only.\n"
+        '{"category":"...", "confidence":0.0, "reason":"..."}'
+    )
+
+
+GMSCategoryClassifier._build_system_prompt = _patched_build_system_prompt

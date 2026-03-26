@@ -357,6 +357,103 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     }
 
 
+def build_prediction_state(transactions: pd.DataFrame) -> dict:
+    merchant_map = load_merchant_category_map()
+    labeled = transactions.merge(merchant_map, on='merchant_name', how='left')
+    classifier = GMSCategoryClassifier(get_available_categories())
+    merchant_map_classified = int(labeled['card_tpbuz_nm_2'].notna().sum())
+    llm_attempted = 0
+    llm_classified = 0
+    keyword_classified = 0
+
+    unmatched = labeled['card_tpbuz_nm_2'].isna()
+    if unmatched.any():
+        unresolved = labeled.loc[unmatched].copy()
+        for idx, row in unresolved.iterrows():
+            category = None
+            reason = None
+            decision = None
+
+            if classifier.ready:
+                llm_attempted += 1
+                decision = classifier.classify(
+                    merchant_name=str(row['merchant_name']),
+                    transaction_detail=str(row['transaction_detail']),
+                    payment_method=str(row['payment_method']),
+                    amount=int(row['amount']),
+                )
+                if decision and decision.category != EXCLUDE_LABEL:
+                    category = decision.category
+                    reason = (
+                        f"LLM({decision.provider}, {decision.confidence:.2f}) "
+                        f"classified this merchant: {decision.reason}"
+                    )
+                    llm_classified += 1
+
+            if category is None:
+                keyword_result = _classify_by_keyword(str(row['merchant_name']))
+                if keyword_result:
+                    category, reason = keyword_result
+                    keyword_classified += 1
+
+            if category is None:
+                category = EXCLUDE_LABEL
+                if decision is not None:
+                    reason = (
+                        f"LLM({decision.provider}, {decision.confidence:.2f}) "
+                        f"did not find a reliable category: {decision.reason}"
+                    )
+                else:
+                    reason = 'No merchant map match and no keyword match.'
+
+            labeled.at[idx, 'card_tpbuz_nm_2'] = category
+            labeled.at[idx, 'classification_reason'] = reason
+
+    labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
+    labeled['classification_reason'] = labeled['classification_reason'].fillna(
+        'No merchant map match and no keyword match.'
+    )
+
+    included = (
+        labeled[labeled['card_tpbuz_nm_2'] != EXCLUDE_LABEL]
+        .groupby('card_tpbuz_nm_2', as_index=False)
+        .agg(amt=('amount', 'sum'), cnt=('amount', 'size'))
+        .sort_values(['amt', 'cnt'], ascending=[False, False])
+        .reset_index(drop=True)
+    )
+
+    excluded = (
+        labeled[labeled['card_tpbuz_nm_2'] == EXCLUDE_LABEL]
+        .groupby(['merchant_name', 'classification_reason'], as_index=False)
+        .agg(
+            amount=('amount', 'sum'),
+            cnt=('amount', 'size'),
+            payment_methods=('payment_method', lambda s: ', '.join(sorted(set(s.astype(str))))),
+            sources=('source', lambda s: ', '.join(sorted(set(s.astype(str))))),
+        )
+        .sort_values(['amount', 'cnt', 'merchant_name'], ascending=[False, False, True])
+        .reset_index(drop=True)
+    )
+
+    return {
+        'records': included.to_dict('records'),
+        'excluded_rows': excluded.to_dict('records'),
+        'transaction_count': int(len(transactions)),
+        'included_amount': int(included['amt'].sum()) if not included.empty else 0,
+        'excluded_amount': int(excluded['amount'].sum()) if not excluded.empty else 0,
+        'total_amount': int(transactions['amount'].sum()),
+        'mapping_stats': {
+            'merchant_map_classified': merchant_map_classified,
+            'llm_enabled': classifier.ready,
+            'llm_model': classifier.model if classifier.ready else None,
+            'llm_attempted': llm_attempted,
+            'llm_classified': llm_classified,
+            'keyword_classified': keyword_classified,
+            'excluded_transaction_count': int((labeled['card_tpbuz_nm_2'] == EXCLUDE_LABEL).sum()),
+        },
+    }
+
+
 @app.get('/')
 def index():
     return render_template(
