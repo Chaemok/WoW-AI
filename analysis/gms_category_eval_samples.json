@@ -1,0 +1,170 @@
+[
+  {
+    "merchant_name": "스타벅스 강남점",
+    "transaction_detail": "아메리카노",
+    "payment_method": "카드",
+    "amount": 5500,
+    "expected_category": "커피/음료"
+  },
+  {
+    "merchant_name": "메가커피 합정점",
+    "transaction_detail": "아이스 라떼",
+    "payment_method": "카드",
+    "amount": 3900,
+    "expected_category": "커피/음료"
+  },
+  {
+    "merchant_name": "파리바게뜨 신촌점",
+    "transaction_detail": "케이크",
+    "payment_method": "카드",
+    "amount": 18000,
+    "expected_category": "제과/제빵/떡/케익"
+  },
+  {
+    "merchant_name": "맥도날드 홍대점",
+    "transaction_detail": "빅맥세트",
+    "payment_method": "카드",
+    "amount": 9200,
+    "expected_category": "패스트푸드"
+  },
+  {
+    "merchant_name": "엽기떡볶이 성수점",
+    "transaction_detail": "떡볶이",
+    "payment_method": "카드",
+    "amount": 16000,
+    "expected_category": "분식"
+  },
+  {
+    "merchant_name": "새마을식당 건대점",
+    "transaction_detail": "삼겹살",
+    "payment_method": "카드",
+    "amount": 42000,
+    "expected_category": "육류/회식"
+  },
+  {
+    "merchant_name": "비건델리 연남",
+    "transaction_detail": "샐러드",
+    "payment_method": "카드",
+    "amount": 8700,
+    "expected_category": "외식"
+  },
+  {
+    "merchant_name": "쿠팡",
+    "transaction_detail": "생활용품",
+    "payment_method": "카드",
+    "amount": 31200,
+    "expected_category": "인터넷쇼핑"
+  },
+  {
+    "merchant_name": "오늘의집",
+    "transaction_detail": "수납함",
+    "payment_method": "카드",
+    "amount": 28900,
+    "expected_category": "인테리어/가정용품"
+  },
+  {
+    "merchant_name": "GS25 성수역점",
+    "transaction_detail": "간식",
+    "payment_method": "카드",
+    "amount": 6800,
+    "expected_category": "음/식료품소매"
+  },
+  {
+    "merchant_name": "이마트 왕십리점",
+    "transaction_detail": "장보기",
+    "payment_method": "카드",
+    "amount": 64200,
+    "expected_category": "음/식료품소매"
+  },
+  {
+    "merchant_name": "카카오T",
+    "transaction_detail": "택시",
+    "payment_method": "카드",
+    "amount": 18400,
+    "expected_category": "교통서비스"
+  },
+  {
+    "merchant_name": "SK엔크린",
+    "transaction_detail": "주유",
+    "payment_method": "카드",
+    "amount": 70000,
+    "expected_category": "자동차/유지비"
+  },
+  {
+    "merchant_name": "KT",
+    "transaction_detail": "통신요금",
+    "payment_method": "계좌",
+    "amount": 69000,
+    "expected_category": "시스템/통신"
+  },
+  {
+    "merchant_name": "정관장",
+    "transaction_detail": "홍삼",
+    "payment_method": "카드",
+    "amount": 45000,
+    "expected_category": "건강/기호식품"
+  },
+  {
+    "merchant_name": "서울아산병원",
+    "transaction_detail": "외래진료",
+    "payment_method": "카드",
+    "amount": 12200,
+    "expected_category": "병원/의료"
+  },
+  {
+    "merchant_name": "올리브영 강남점",
+    "transaction_detail": "화장품",
+    "payment_method": "카드",
+    "amount": 23600,
+    "expected_category": "화장품소매"
+  },
+  {
+    "merchant_name": "메가박스 코엑스",
+    "transaction_detail": "영화티켓",
+    "payment_method": "카드",
+    "amount": 15000,
+    "expected_category": "공연관람"
+  },
+  {
+    "merchant_name": "그린약국",
+    "transaction_detail": "감기약",
+    "payment_method": "카드",
+    "amount": 9800,
+    "expected_category": "의약/의료품"
+  },
+  {
+    "merchant_name": "약손명가 신촌점",
+    "transaction_detail": "피부관리",
+    "payment_method": "카드",
+    "amount": 55000,
+    "expected_category": "건강/뷰티/마사지"
+  },
+  {
+    "merchant_name": "크린토피아 연남점",
+    "transaction_detail": "세탁",
+    "payment_method": "카드",
+    "amount": 12000,
+    "expected_category": "수리서비스"
+  },
+  {
+    "merchant_name": "토이저러스 잠실점",
+    "transaction_detail": "장난감",
+    "payment_method": "카드",
+    "amount": 32000,
+    "expected_category": "선물/완구"
+  },
+  {
+    "merchant_name": "신한카드",
+    "transaction_detail": "카드대금",
+    "payment_method": "계좌",
+    "amount": 500000,
+    "expected_category": "제외"
+  },
+  {
+    "merchant_name": "카카오페이",
+    "transaction_detail": "송금",
+    "payment_method": "계좌",
+    "amount": 50000,
+    "expected_category": "제외"
+  }
+]
