@@ -95,6 +95,12 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+필요하면 `.env.example`을 복사해 `.env`를 만든 뒤 값을 조정한다.
+
+```bash
+copy .env.example .env
+```
+
 ## 서버 실행
 
 ### 1. 내부 AI 서버 실행
@@ -112,6 +118,8 @@ python chatbot.py --host 0.0.0.0 --port 8000
   - `1`이면 4bit 양자화 사용
 - `ANALYZE_MAX_NEW_TOKENS`
 - `CHAT_MAX_NEW_TOKENS`
+- `HOST`
+- `PORT`
 
 예시:
 

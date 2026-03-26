@@ -46,6 +46,12 @@ git checkout main
 
 가장 쉬운 방법은 포함된 리눅스 시작 스크립트를 쓰는 것이다.
 
+필요하면 먼저 `.env.example`을 복사해 `.env`를 만든다.
+
+```bash
+cp .env.example .env
+```
+
 ```bash
 chmod +x start_chatbot_linux.sh
 ./start_chatbot_linux.sh

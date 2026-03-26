@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 from flask import Flask, jsonify, request
+from dotenv import load_dotenv
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
@@ -26,6 +27,8 @@ DATA_ANALYSIS_ROOT = Path(__file__).resolve().parent
 if str(DATA_ANALYSIS_ROOT) not in sys.path:
     sys.path.insert(0, str(DATA_ANALYSIS_ROOT))
 
+# 프로젝트 루트의 .env를 우선 로드한다.
+load_dotenv(DATA_ANALYSIS_ROOT / ".env")
 
 MODEL_ID = os.environ.get("MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
