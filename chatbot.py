@@ -252,20 +252,144 @@ def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(value, maximum))
 
 
+def _resolve_tip_copy(category_name: str, gap: float, savable_amount: int) -> tuple[str, str, str]:
+    """카테고리별로 바로 읽히는 짧은 행동 문구를 만든다."""
+    if category_name == "커피/음료":
+        return (
+            "커피·음료",
+            "커피 구매 횟수부터 먼저 줄여보세요",
+            (
+                f"커피/음료 비중이 기준보다 {gap:.1f}%p 높습니다. "
+                f"이번 달에는 주간 구매 횟수를 먼저 정해두고, 약 {savable_amount:,}원 정도를 아끼는 것을 목표로 잡아보세요."
+            ),
+        )
+
+    if category_name in {"외식", "음식배달서비스", "패스트푸드", "분식", "육류/회식", "주점"}:
+        return (
+            "식비",
+            f"{category_name} 지출의 빈도부터 조절해보세요",
+            (
+                f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
+                f"배달·외식 횟수나 추가 주문 기준을 먼저 정하면 약 {savable_amount:,}원 정도의 절감 여지를 만들 수 있습니다."
+            ),
+        )
+
+    if category_name == "서적/도서":
+        return (
+            "책 구매",
+            "읽을 책만 남기고 구매 순서를 정해보세요",
+            (
+                f"서적/도서 지출이 기준보다 {gap:.1f}%p 높습니다. "
+                f"바로 읽을 책 1권만 먼저 고르고 나머지는 보류하면 약 {savable_amount:,}원 정도를 줄이는 데 도움이 됩니다."
+            ),
+        )
+
+    if category_name == "사무/교육용품":
+        return (
+            "학습 준비물",
+            "사무·교육용품은 재고부터 확인해보세요",
+            (
+                f"사무/교육용품 비중이 기준보다 {gap:.1f}%p 높습니다. "
+                f"이미 가진 물건을 먼저 쓰고, 꼭 필요한 품목만 사면 약 {savable_amount:,}원 정도를 줄일 수 있습니다."
+            ),
+        )
+
+    if category_name == "교육/학원":
+        return (
+            "교육비",
+            "교육비는 실제 이용 빈도부터 점검해보세요",
+            (
+                f"교육/학원 지출이 기준보다 {gap:.1f}%p 높습니다. "
+                f"정기 결제 중 실제로 활용하지 않는 항목이 없는지 먼저 점검하면 약 {savable_amount:,}원 정도를 아낄 수 있습니다."
+            ),
+        )
+
+    if category_name in {"인터넷쇼핑", "의복/의류", "패션잡화"}:
+        return (
+            "쇼핑",
+            "온라인 장바구니를 하루만 더 묵혀보세요",
+            (
+                f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
+                f"즉시 결제 대신 하루만 더 보류해도 충동구매를 줄여 약 {savable_amount:,}원 정도 절약할 수 있습니다."
+            ),
+        )
+
+    if category_name in {"숙박", "여행/유학대행"}:
+        return (
+            "여행·숙박",
+            "여행·숙박 지출은 이번 달 예산 상한을 먼저 정해보세요",
+            (
+                f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
+                f"건별 예산 상한을 먼저 정하면 큰 지출 한 번이 흔들리는 것을 막고 약 {savable_amount:,}원 정도를 조절할 수 있습니다."
+            ),
+        )
+
+    return (
+        category_name,
+        f"{category_name} 지출부터 먼저 다듬어보세요",
+        (
+            f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
+            f"이번 달에는 이 항목에서 약 {savable_amount:,}원 정도를 줄이는 것을 1차 목표로 두는 편이 가장 효율적입니다."
+        ),
+    )
+
+
+def _build_action_tip(category_name: str, savable_amount: int) -> str:
+    """goal.action_tip과 소비 날씨 설명에서 함께 쓸 한 문장 행동 제안."""
+    if category_name == "커피/음료":
+        return (
+            f"커피/음료는 단가보다 빈도가 지출을 키우기 쉬운 항목입니다. "
+            f"이번 달에는 주간 구매 횟수를 먼저 정해 약 {savable_amount:,}원 정도를 줄여보세요."
+        )
+
+    if category_name in {"외식", "음식배달서비스", "패스트푸드", "분식", "육류/회식", "주점"}:
+        return (
+            f"{category_name}는 한 번의 금액보다 반복 빈도가 누적되기 쉬운 항목입니다. "
+            f"외식·배달 횟수 기준을 먼저 정해 약 {savable_amount:,}원 정도를 조절해보세요."
+        )
+
+    if category_name == "서적/도서":
+        return (
+            f"서적/도서는 '바로 읽을 것만 산다'는 기준 하나만 세워도 지출이 안정됩니다. "
+            f"이번 달에는 약 {savable_amount:,}원 정도를 줄이는 흐름을 만들어보세요."
+        )
+
+    if category_name == "사무/교육용품":
+        return (
+            f"사무/교육용품은 재고 확인만 해도 중복 구매를 꽤 줄일 수 있습니다. "
+            f"이미 가진 물건을 먼저 쓰는 기준으로 약 {savable_amount:,}원 정도를 아껴보세요."
+        )
+
+    if category_name == "교육/학원":
+        return (
+            f"교육/학원은 고정비 성격이 강하니 실제 이용 중인 항목부터 점검해보세요. "
+            f"불필요한 결제만 정리해도 약 {savable_amount:,}원 정도 절감할 수 있습니다."
+        )
+
+    if category_name in {"숙박", "여행/유학대행"}:
+        return (
+            f"{category_name} 지출은 건당 금액이 커서 예산 상한을 먼저 정하는 게 효과적입니다. "
+            f"이번 달에는 약 {savable_amount:,}원 정도를 조절하는 흐름을 목표로 해보세요."
+        )
+
+    return (
+        f"{category_name}부터 관리해보세요. 현재 비중이 기준보다 높아 절감 여지가 크고, "
+        f"약 {savable_amount:,}원 정도를 줄일 수 있습니다."
+    )
+
+
 def _build_tip_item(order: int, item: dict) -> dict:
     # overspending 상위 항목을 바로 카드형 UI에 붙일 수 있게 정리한다.
     category_name = item["name"]
     gap = round(float(item["myRatio"]) - float(item["baseRatio"]), 1)
     savable_amount = int(item["savableAmount"])
+    keyword, title, description = _resolve_tip_copy(category_name, gap, savable_amount)
 
     return {
         "order": order,
-        "keyword": category_name,
-        "title": f"{category_name} 지출부터 먼저 다듬어보세요",
-        "description": (
-            f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
-            f"이번 달에는 이 항목에서 약 {savable_amount:,}원 정도를 줄이는 것을 1차 목표로 두는 편이 가장 효율적입니다."
-        ),
+        "keyword": keyword,
+        "title": title,
+        "description": description,
     }
 
 
@@ -276,12 +400,12 @@ def _build_goal(summary: dict, overspending: list[dict]) -> dict:
 
     if overspending:
         top = overspending[0]
-        action_tip = (
-            f"{top['name']}부터 관리해보세요. "
-            f"현재 비중이 기준보다 높아 절감 여지가 크고, 약 {int(top['savableAmount']):,}원 정도를 줄일 수 있습니다."
-        )
+        action_tip = _build_action_tip(top["name"], int(top["savableAmount"]))
     else:
-        action_tip = "현재 소비 패턴은 클러스터 기준과 크게 다르지 않습니다. 큰 폭의 절감보다 지금의 소비 리듬을 유지하는 쪽이 좋습니다."
+        action_tip = (
+            "현재 소비 패턴은 기준과 크게 다르지 않습니다. "
+            "무리하게 줄이기보다 지금의 소비 리듬을 유지하면서 큰 지출만 한 번씩 점검해보세요."
+        )
 
     return {
         "savableAmount": total_savable,
@@ -320,12 +444,12 @@ def _build_weather(summary: dict, overspending: list[dict], categories: list[dic
         code, label = "STORMY", "폭우"
 
     if not overspending:
-        reason = "절감 여지가 크지 않고 소비 분포도 비교적 안정적입니다."
+        reason = "절감 여지가 크지 않고 소비 분포도 비교적 안정적입니다. 지금의 소비 리듬을 유지해도 좋습니다."
     else:
         top = overspending[0]
         reason = (
-            f"{top['name']} 비중이 기준보다 높고, 전체적으로 약 {total_savable:,}원 정도의 절감 여지가 보여 "
-            f"{label} 단계로 해석했습니다."
+            f"{top['name']} 비중이 기준보다 높고 최근 소비 흐름에서 약 {total_savable:,}원 정도의 조절 여지가 보여 "
+            f"이번 달 소비 날씨를 {label} 단계로 해석했습니다."
         )
 
     return {
