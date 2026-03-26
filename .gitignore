@@ -31,3 +31,11 @@ analysis/personal_transactions_labeled.csv
 analysis/personal_training_input.csv
 analysis/user_category_overrides.csv
 analysis/merchant_category_map.backup.csv
+
+# Runtime logs
+*.out.log
+*.err.log
+
+# Model artifacts
+model/
+models/

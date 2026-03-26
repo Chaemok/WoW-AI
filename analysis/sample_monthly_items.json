@@ -1,0 +1,27 @@
+[
+  {
+    "category": "커피/음료",
+    "amount": 233500,
+    "count": 12
+  },
+  {
+    "category": "육류/회식",
+    "amount": 193200,
+    "count": 4
+  },
+  {
+    "category": "분식",
+    "amount": 167600,
+    "count": 7
+  },
+  {
+    "category": "서적/도서",
+    "amount": 121500,
+    "count": 3
+  },
+  {
+    "category": "사무/교육용품",
+    "amount": 115700,
+    "count": 5
+  }
+]
