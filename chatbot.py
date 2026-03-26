@@ -248,6 +248,104 @@ def _get_cluster_icon(cluster_id: int) -> str:
     return CLUSTER_ICON_MAP.get(cluster_id, "📊")
 
 
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(value, maximum))
+
+
+def _build_tip_item(order: int, item: dict) -> dict:
+    # overspending 상위 항목을 바로 카드형 UI에 붙일 수 있게 정리한다.
+    category_name = item["name"]
+    gap = round(float(item["myRatio"]) - float(item["baseRatio"]), 1)
+    savable_amount = int(item["savableAmount"])
+
+    return {
+        "order": order,
+        "keyword": category_name,
+        "title": f"{category_name} 지출부터 먼저 다듬어보세요",
+        "description": (
+            f"{category_name} 비중이 기준보다 {gap:.1f}%p 높습니다. "
+            f"이번 달에는 이 항목에서 약 {savable_amount:,}원 정도를 줄이는 것을 1차 목표로 두는 편이 가장 효율적입니다."
+        ),
+    }
+
+
+def _build_goal(summary: dict, overspending: list[dict]) -> dict:
+    # goal은 "이번 리포트에서 가장 먼저 뭘 하면 되는지"를 한 문장으로 주는 용도다.
+    total_savable = int(summary["totalSavable"])
+    expected_spending = int(summary["expectedSpending"])
+
+    if overspending:
+        top = overspending[0]
+        action_tip = (
+            f"{top['name']}부터 관리해보세요. "
+            f"현재 비중이 기준보다 높아 절감 여지가 크고, 약 {int(top['savableAmount']):,}원 정도를 줄일 수 있습니다."
+        )
+    else:
+        action_tip = "현재 소비 패턴은 클러스터 기준과 크게 다르지 않습니다. 큰 폭의 절감보다 지금의 소비 리듬을 유지하는 쪽이 좋습니다."
+
+    return {
+        "savableAmount": total_savable,
+        "expectedSpending": expected_spending,
+        "actionTip": action_tip,
+        "savable_amount": total_savable,
+        "expected_spending": expected_spending,
+        "action_tip": action_tip,
+    }
+
+
+def _build_weather(summary: dict, overspending: list[dict], categories: list[dict], total_amount: int) -> dict:
+    # 소비날씨는 별도 모델이 아니라 리포트 결과를 요약한 표시용 지표다.
+    # score가 높을수록 안정적인 소비 패턴으로 본다.
+    total_savable = int(summary["totalSavable"])
+    savable_ratio = (total_savable / total_amount) if total_amount else 0.0
+    overspending_count = len(overspending)
+    top_category_ratio = max((float(item["myRatio"]) for item in categories), default=0.0)
+
+    # 절감 가능 금액, 과소비 항목 수, 특정 카테고리 편중을 함께 반영한다.
+    score = 100.0
+    score -= min(42.0, savable_ratio * 120.0)
+    score -= min(30.0, overspending_count * 6.0)
+    score -= max(0.0, top_category_ratio - 35.0) * 0.8
+    score = _clamp(round(score), 0, 100)
+
+    if score >= 80:
+        code, label = "SUNNY", "맑음"
+    elif score >= 60:
+        code, label = "PARTLY_CLOUDY", "구름조금"
+    elif score >= 40:
+        code, label = "CLOUDY", "흐림"
+    elif score >= 20:
+        code, label = "RAINY", "비"
+    else:
+        code, label = "STORMY", "폭우"
+
+    if not overspending:
+        reason = "절감 여지가 크지 않고 소비 분포도 비교적 안정적입니다."
+    else:
+        top = overspending[0]
+        reason = (
+            f"{top['name']} 비중이 기준보다 높고, 전체적으로 약 {total_savable:,}원 정도의 절감 여지가 보여 "
+            f"{label} 단계로 해석했습니다."
+        )
+
+    return {
+        "code": code,
+        "label": label,
+        "score": int(score),
+        "reason": reason,
+    }
+
+
+def _get_display_category_name(spending_advisor_module, category: str) -> str:
+    # spending_advisor의 표시용 매핑이 깨졌을 때는 원래 45개 카테고리명을 그대로 쓴다.
+    display_name = spending_advisor_module.normalize_to_db(category)
+    if not display_name:
+        return category
+    if ("?" in display_name or "\ufffd" in display_name) and ("?" not in category and "\ufffd" not in category):
+        return category
+    return display_name
+
+
 def run_analysis(df: pd.DataFrame) -> dict:
     """분석 결과를 백엔드가 바로 쓰기 쉬운 구조로 정리한다."""
     import gmm_predict as _gp
@@ -271,10 +369,12 @@ def run_analysis(df: pd.DataFrame) -> dict:
             category = str(feat_col).replace("비율_", "")
             full_cluster_pct_map[category] = round(float(value) * 100, 1)
 
+    # categories는 리포트/DB 저장의 기본 상세 목록이고,
+    # clusterStats는 사용자 비율 vs 클러스터 기준 비율을 비교하는 내부 요약입니다.
     cluster_stats = []
     categories = []
     for category, amount in sorted(user_amounts.items(), key=lambda item: -item[1]):
-        display_name = _sa.normalize_to_db(category)
+        display_name = _get_display_category_name(_sa, category)
         user_pct = round(amount / total_amount * 100, 1) if total_amount else 0.0
         cluster_pct = full_cluster_pct_map.get(category, 0.0)
         diff_pct = round(user_pct - cluster_pct, 1)
@@ -298,10 +398,11 @@ def run_analysis(df: pd.DataFrame) -> dict:
             }
         )
 
+    # overspending은 "어디서 줄일 수 있는지"만 따로 추린 절감 후보 목록입니다.
     overspending = []
     reduction_summary: dict[str, int] = {}
     for target in reduction_targets:
-        display_name = _sa.normalize_to_db(target["category"])
+        display_name = _get_display_category_name(_sa, target["category"])
         savable_amount = int(target["suggested_reduction_amt"])
         reduction_summary[display_name] = reduction_summary.get(display_name, 0) + savable_amount
         overspending.append(
@@ -313,14 +414,28 @@ def run_analysis(df: pd.DataFrame) -> dict:
             }
         )
 
+    # summary/goal/weather는 백엔드가 바로 저장하거나 화면에 붙일 수 있는
+    # 상위 레벨 리포트 필드입니다.
     total_savable = int(sum(reduction_summary.values()))
     summary = {
         "totalSavable": total_savable,
         "expectedSpending": max(total_amount - total_savable, 0),
     }
+    tips = [_build_tip_item(order, item) for order, item in enumerate(overspending[:3], start=1)]
+    goal = _build_goal(summary, overspending)
+    weather = _build_weather(summary, overspending, categories, total_amount)
+    # categoryScheme은 현재 리포트가 어떤 카테고리 축 위에서 계산됐는지
+    # 백엔드/프론트가 헷갈리지 않도록 함께 내려준다.
+    category_scheme = {
+        "type": "gmm_features",
+        "version": 1,
+        "count": len(_gp.get_available_categories()),
+        "categories": _gp.get_available_categories(),
+    }
 
     return {
         "prompt": prompt,
+        "reportVersion": "analysis-report-v2",
         "clusterId": cluster_id,
         "clusterName": cluster_name,
         "clusterDescription": cluster_description,
@@ -334,6 +449,10 @@ def run_analysis(df: pd.DataFrame) -> dict:
         "clusterStats": cluster_stats,
         "categories": categories,
         "overspending": overspending,
+        "tips": tips,
+        "goal": goal,
+        "weather": weather,
+        "categoryScheme": category_scheme,
         "reductionSummary": reduction_summary,
         "summary": summary,
         "sourceTransactionCount": int(df["cnt"].sum()),
@@ -355,6 +474,49 @@ def _build_history(session_id: str | None, keep_session: bool) -> tuple[str | No
 def _append_assistant_reply(history: list[dict], message: str, keep_session: bool) -> None:
     if keep_session:
         history.append({"role": "assistant", "content": message})
+
+
+def _build_report_response(analysis: dict, session_id: str | None) -> dict:
+    # /api/analyze는 백엔드가 바로 저장하기 쉬운 리포트 형태만 내려준다.
+    response = {
+        "cluster": analysis["cluster"],
+        "categories": [
+            {
+                "name": item["name"],
+                "amount": item["amount"],
+                "my_ratio": item["myRatio"],
+                "base_ratio": item["baseRatio"],
+                "diff": item["diff"],
+            }
+            for item in analysis["categories"]
+        ],
+        "overspending": [
+            {
+                "name": item["name"],
+                "my_ratio": item["myRatio"],
+                "base_ratio": item["baseRatio"],
+                "savable_amount": item["savableAmount"],
+            }
+            for item in analysis["overspending"]
+        ],
+        "summary": {
+            "total_savable": analysis["summary"]["totalSavable"],
+            "expected_spending": analysis["summary"]["expectedSpending"],
+        },
+        "tips": analysis["tips"],
+        "goal": {
+            "savable_amount": analysis["goal"]["savable_amount"],
+            "expected_spending": analysis["goal"]["expected_spending"],
+            "action_tip": analysis["goal"]["action_tip"],
+        },
+    }
+
+    # 채팅 세션을 이어붙여야 하는 경우에만 session id를 추가로 내려준다.
+    if session_id is not None:
+        response["session_id"] = session_id
+        response["sessionId"] = session_id
+
+    return response
 
 
 @app.get("/health")
@@ -390,35 +552,10 @@ def analyze():
     feedback = generate(history, max_new_tokens=ANALYZE_MAX_NEW_TOKENS)
     _append_assistant_reply(history, feedback, bool(keep_session))
 
-    response = {
-        # 기존 응답 키
-        "session_id": current_session_id,
-        "cluster_id": analysis["clusterId"],
-        "cluster_name": analysis["clusterName"],
-        "cluster_description": analysis["clusterDescription"],
-        "cluster_icon": analysis["clusterIcon"],
-        "feedback": feedback,
-        "cluster_stats": analysis["clusterStats"],
-        "reduction_summary": analysis["reductionSummary"],
-        "total_reduction": analysis["summary"]["totalSavable"],
-        "source_transaction_count": analysis["sourceTransactionCount"],
-        "source_total_spending": analysis["sourceTotalSpending"],
-        # 백엔드 연동용 camelCase 키
-        "sessionId": current_session_id,
-        "clusterId": analysis["clusterId"],
-        "clusterName": analysis["clusterName"],
-        "clusterDescription": analysis["clusterDescription"],
-        "clusterIcon": analysis["clusterIcon"],
-        "cluster": analysis["cluster"],
-        "clusterStats": analysis["clusterStats"],
-        "categories": analysis["categories"],
-        "overspending": analysis["overspending"],
-        "reductionSummary": analysis["reductionSummary"],
-        "summary": analysis["summary"],
-        "totalReduction": analysis["summary"]["totalSavable"],
-        "sourceTransactionCount": analysis["sourceTransactionCount"],
-        "sourceTotalSpending": analysis["sourceTotalSpending"],
-    }
+    response = _build_report_response(
+        analysis=analysis,
+        session_id=current_session_id if bool(keep_session) else None,
+    )
     return jsonify(response)
 
 
