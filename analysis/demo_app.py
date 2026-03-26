@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from cluster_definitions import FINAL_CLUSTER_DEFINITIONS, FINAL_CLUSTER_LABELS  # noqa: E402
 from gmm_predict import get_available_categories, predict_spending_type  # noqa: E402
+from hybrid_category_classifier import GMSCategoryClassifier  # noqa: E402
 from spending_advisor import analyze_and_advise  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
