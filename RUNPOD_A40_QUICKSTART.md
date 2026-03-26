@@ -63,6 +63,19 @@ chmod +x start_chatbot_linux.sh
 - `pip install -r requirements.txt`
 - `chatbot.py --host 0.0.0.0 --port 8000` 실행
 
+터미널 종료 후에도 유지하려면 백그라운드 스크립트를 권장한다.
+
+```bash
+chmod +x start_chatbot_background_linux.sh stop_chatbot_linux.sh status_chatbot_linux.sh
+./start_chatbot_background_linux.sh
+./status_chatbot_linux.sh
+```
+
+백그라운드 실행 시 로그 위치:
+
+- `logs/chatbot.out.log`
+- `logs/chatbot.err.log`
+
 ## 4. 환경변수
 
 필요하면 실행 전에 아래 값을 지정할 수 있다.
