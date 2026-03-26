@@ -65,6 +65,8 @@ def _user_category_amounts(df: pd.DataFrame) -> dict[str, float]:
     valid["refined_category"] = valid["card_tpbuz_nm_2"].map(
         lambda x: _gp._category_map.get(x, x)
     )
+    # "제외"는 소비 패턴 벡터를 만들 때 아예 feature 계산에서 빼야 한다.
+    # 금융성 이체/카드대금/충전 같은 항목이 남아 있으면 클러스터 비율이 왜곡된다.
     valid = valid[valid["refined_category"] != "제외"]
     return valid.groupby("refined_category")["amt"].sum().to_dict()
 
@@ -124,32 +126,52 @@ def _build_reduction_targets(
 
 
 
-# DB의 expense_category 테이블과 일치하는 공식 카테고리 목록
-EXPENSE_CATEGORIES: list[str] = [
-    "인터넷쇼핑", "인테리어/가정용품", "교통서비스", "음/식료품소매",
-    "외식", "제과/제빵/떡/케익", "커피/음료", "패스트푸드",
-    "자동차/유지비", "시스템/통신", "건강/기호식품", "분식",
-    "육류/회식", "선물/완구", "병원/의료", "화장품소매",
-    "공연관람", "의약/의료품", "건강/뷰티/마사지", "수리서비스",
-]
+# 표시용 공식 카테고리는 이제 "예전 20개 요약 축"이 아니라
+# GMM이 실제로 학습/예측에 쓰는 45개 feature 축을 그대로 따른다.
+# 이유:
+# 1) 클러스터는 이미 45개 카테고리 비율 벡터로 학습되어 있다.
+# 2) 리포트 표시명이 20개 축으로 축약되면 cluster/category/overspending 해석이 어긋난다.
+# 3) 20개 요약 뷰가 필요하면, 그건 나중에 화면 전용 파생 로직으로 따로 만드는 편이 안전하다.
+EXPENSE_CATEGORIES: list[str] = list(_gp.get_available_categories())
 
-# DB 카테고리 → GMM 내부 카테고리 매핑 (이름이 다른 것만)
+# 현재 모델과 백엔드가 쓰는 카테고리명은 대부분 동일하다.
+# 그래서 예전처럼 "DB 20개 -> GMM 내부 카테고리" 대규모 변환을 두지 않는다.
+# 다만 과거 데이터/문서/수동 입력에서 들어올 수 있는 레거시 표기만
+# canonical category로 흡수한다.
+#
+# 주의:
+# - 여기 매핑을 크게 늘리면 다시 "표시용 카테고리 체계"와 "실제 모델 카테고리 체계"가
+#   분리될 수 있으니, 꼭 필요한 별칭만 유지한다.
 _DB_TO_GMM: dict[str, str] = {
-    "제과/제빵/떡/케익": "제과/제빵",
-    "건강/기호식품":     "건강/기호식품",  # GMM에 없으면 그대로 사용
+    "제과/제빵": "제과/제빵/떡/케익",
+    "제과/제빵/떡/케이크": "제과/제빵/떡/케익",
 }
 
-# GMM 내부 카테고리 → DB 카테고리 역매핑 (피드백 표시용)
-_GMM_TO_DB: dict[str, str] = {v: k for k, v in _DB_TO_GMM.items() if k != v}
+# 리포트 표시 단계에서는 canonical category를 그대로 쓴다.
+# 즉 "45개 실제 feature 이름"이 화면/응답 기준 이름이 된다.
+#
+# 예전에는 20개 표시 카테고리 기준 때문에 일부 이름을 다시 축약해 보여줬지만,
+# 이제는 리포트/클러스터/GMM 기준을 한 축으로 맞추기 위해 identity mapping을 기본값으로 둔다.
+_GMM_TO_DB: dict[str, str] = {
+    category: category for category in EXPENSE_CATEGORIES
+}
 
 
 def normalize_to_gmm(category: str) -> str:
-    """DB 카테고리명 → GMM 내부 카테고리명으로 변환"""
+    """입력 카테고리를 GMM canonical category로 정규화한다.
+
+    대부분의 현재 카테고리는 이미 canonical 이름이라 그대로 통과한다.
+    레거시 표기만 최소한으로 흡수한다.
+    """
     return _DB_TO_GMM.get(category, category)
 
 
 def normalize_to_db(category: str) -> str:
-    """GMM 내부 카테고리명 → DB 카테고리명으로 변환 (피드백 표시용)"""
+    """리포트 표시용 카테고리명으로 변환한다.
+
+    현재 정책은 "실제 45개 feature 이름 그대로 노출"이므로 identity mapping이 기본이다.
+    나중에 화면 전용 20개 요약 뷰가 필요하면, 이 함수가 아니라 별도 파생 계층에서 다룬다.
+    """
     return _GMM_TO_DB.get(category, category)
 
 
@@ -187,7 +209,8 @@ def _build_prompt(
     else:
         reduction_lines = "  - 클러스터 평균 대비 크게 초과하는 항목이 없습니다."
 
-    # 공식 카테고리 목록 (AI 참조용)
+    # 프롬프트에도 실제 45개 feature 이름을 그대로 넣는다.
+    # 이렇게 해야 모델 해석과 조언 문구가 같은 카테고리 축 위에서 움직인다.
     category_list = ", ".join(EXPENSE_CATEGORIES)
 
     prompt = f"""당신은 개인 소비 습관 분석 전문가입니다.
