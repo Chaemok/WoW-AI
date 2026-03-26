@@ -14,6 +14,7 @@
   - `Qwen/Qwen2.5-7B-Instruct`
 - 기본 로딩:
   - `4bit`
+- 14B 모델은 다운로드와 캐시를 포함해 대략 `30GB` 안팎 공간을 차지할 수 있다.
 
 ## 1. Pod 준비
 
@@ -60,8 +61,9 @@ chmod +x start_chatbot_linux.sh
 이 스크립트는 아래 작업을 자동으로 처리한다.
 
 - `.venv` 생성
-- `pip install -r requirements.txt`
+- `requirements-server.txt` 우선 설치
 - `chatbot.py --host 0.0.0.0 --port 8000` 실행
+- Hugging Face 캐시를 프로젝트 내부 `.cache`로 고정
 
 터미널 종료 후에도 유지하려면 백그라운드 스크립트를 권장한다.
 
@@ -87,6 +89,7 @@ export ANALYZE_MAX_NEW_TOKENS=256
 export CHAT_MAX_NEW_TOKENS=160
 export HOST=0.0.0.0
 export PORT=8000
+export APP_CACHE_DIR=/workspace/WoW-AI/.cache
 ./start_chatbot_linux.sh
 ```
 
@@ -95,6 +98,15 @@ export PORT=8000
 ```bash
 export MODEL_ID=/workspace/models/Qwen2.5-7B-Instruct
 ./start_chatbot_linux.sh
+```
+
+14B를 쓸 경우 예시:
+
+```bash
+export MODEL_ID=Qwen/Qwen2.5-14B-Instruct
+export LOAD_IN_4BIT=0
+export APP_CACHE_DIR=/workspace/WoW-AI/.cache
+./start_chatbot_background_linux.sh
 ```
 
 ## 5. 서버 확인

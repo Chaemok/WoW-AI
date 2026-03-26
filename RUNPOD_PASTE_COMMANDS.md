@@ -9,6 +9,8 @@ git clone https://github.com/Chaemok/WoW-AI.git
 cd WoW-AI
 git checkout chaemok
 cp .env.example .env
+sed -i 's#^MODEL_ID=.*#MODEL_ID=Qwen/Qwen2.5-14B-Instruct#' .env
+sed -i 's#^LOAD_IN_4BIT=.*#LOAD_IN_4BIT=0#' .env
 chmod +x start_chatbot_background_linux.sh stop_chatbot_linux.sh status_chatbot_linux.sh
 ./start_chatbot_background_linux.sh
 ./status_chatbot_linux.sh

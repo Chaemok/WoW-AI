@@ -12,13 +12,23 @@ LOG_DIR="${LOG_DIR:-logs}"
 PID_FILE="$LOG_DIR/chatbot.pid"
 OUT_LOG="$LOG_DIR/chatbot.out.log"
 ERR_LOG="$LOG_DIR/chatbot.err.log"
+REQUIREMENTS_FILE="${REQUIREMENTS_FILE:-requirements-server.txt}"
+APP_CACHE_DIR="${APP_CACHE_DIR:-$ROOT_DIR/.cache}"
 
 export MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-7B-Instruct}"
 export LOAD_IN_4BIT="${LOAD_IN_4BIT:-1}"
 export ANALYZE_MAX_NEW_TOKENS="${ANALYZE_MAX_NEW_TOKENS:-256}"
 export CHAT_MAX_NEW_TOKENS="${CHAT_MAX_NEW_TOKENS:-160}"
+export HF_HOME="${HF_HOME:-$APP_CACHE_DIR/huggingface}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$APP_CACHE_DIR/huggingface}"
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$APP_CACHE_DIR/pip}"
+
+if [ ! -f "$REQUIREMENTS_FILE" ]; then
+  REQUIREMENTS_FILE="requirements.txt"
+fi
 
 mkdir -p "$LOG_DIR"
+mkdir -p "$APP_CACHE_DIR"
 
 if [ -f "$PID_FILE" ]; then
   EXISTING_PID="$(cat "$PID_FILE")"
@@ -38,11 +48,13 @@ fi
 # 가상환경을 활성화하고 필요한 패키지를 설치한다.
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r "$REQUIREMENTS_FILE"
 
 echo "[INFO] 백그라운드로 AI 서버를 시작합니다."
 echo "[INFO] HOST=$HOST PORT=$PORT"
 echo "[INFO] MODEL_ID=$MODEL_ID"
+echo "[INFO] REQUIREMENTS_FILE=$REQUIREMENTS_FILE"
+echo "[INFO] HF_HOME=$HF_HOME"
 echo "[INFO] OUT_LOG=$OUT_LOG"
 echo "[INFO] ERR_LOG=$ERR_LOG"
 
