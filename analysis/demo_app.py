@@ -3,26 +3,41 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import re
 import sys
 from pathlib import Path
 
 import pandas as pd
+import requests as http_requests
 from flask import Flask, jsonify, render_template, request
+from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+load_dotenv(PROJECT_ROOT / '.env')
+load_dotenv(Path(__file__).resolve().parent / '.env')
+
 from cluster_definitions import FINAL_CLUSTER_DEFINITIONS, FINAL_CLUSTER_LABELS  # noqa: E402
 from gmm_predict import get_available_categories, predict_spending_type  # noqa: E402
-from hybrid_category_classifier import GMSCategoryClassifier  # noqa: E402
 from spending_advisor import analyze_and_advise  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 DUMMY_CSV_PATH = BASE_DIR / 'dummy_transactions.csv'
 OVERRIDE_CSV_PATH = BASE_DIR / 'user_category_overrides.csv'
 MERCHANT_MAP_PATH = BASE_DIR / 'merchant_category_map.csv'
+GMS_KEY = (
+    os.getenv('CATEGORY_LLM_API_KEY')
+    or os.getenv('GMS_KEY')
+    or os.getenv('OPENAI_API_KEY')
+    or ''
+).strip()
+GMS_BASE_URL = os.getenv('CATEGORY_LLM_BASE_URL', 'https://gms.ssafy.io/gmsapi/api.openai.com/v1').rstrip('/')
+GMS_MODEL = os.getenv('CATEGORY_LLM_MODEL', 'gpt-5.2')
+GMS_TIMEOUT_SEC = int(os.getenv('CATEGORY_LLM_TIMEOUT_SEC', '20'))
 OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
@@ -441,43 +456,89 @@ def _should_retry_excluded_map(row: pd.Series) -> bool:
     return not _has_financial_exclude_signal(str(row.get('merchant_name') or ''))
 
 
-def _resolve_unmatched_category(
-    row: pd.Series,
-    classifier: GMSCategoryClassifier,
-) -> tuple[str, str, bool, bool]:
-    merchant_name = str(row['merchant_name'])
+def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
+    if not GMS_KEY:
+        return None
 
-    # Legacy reference for weekend debugging:
-    # 1) keyword -> 2) direct GMS -> 3) exclude
-    # The older demo_app.py used a very similar order, so we keep that intent here.
+    allowed_categories = list(get_available_categories())
+    request_body = {
+        'model': GMS_MODEL,
+        'temperature': 0,
+        'messages': [
+            {
+                'role': 'developer',
+                'content': (
+                    "다음 거래를 허용된 카테고리 중 정확히 하나로만 분류해. "
+                    "카테고리명만 답하지 말고 JSON으로 답해. "
+                    f"허용 카테고리: {', '.join(allowed_categories)}. "
+                    f"애매하면 {EXCLUDE_LABEL} 로 답해."
+                ),
+            },
+            {
+                'role': 'user',
+                'content': (
+                    f"merchant_name={row['merchant_name']}\n"
+                    f"transaction_detail={row['transaction_detail']}\n"
+                    f"payment_method={row['payment_method']}\n"
+                    f"amount={int(row['amount'])}"
+                ),
+            },
+        ],
+        'response_format': {'type': 'json_object'},
+        'max_tokens': 120,
+    }
+
+    try:
+        response = http_requests.post(
+            f'{GMS_BASE_URL}/chat/completions',
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {GMS_KEY}',
+            },
+            json=request_body,
+            timeout=GMS_TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data['choices'][0]['message']['content']
+        parsed = json.loads(content)
+    except Exception:
+        return None
+
+    category = str(parsed.get('category') or '').strip()
+    reason = str(parsed.get('reason') or '').strip()
+    if category not in allowed_categories and category != EXCLUDE_LABEL:
+        return None
+    if not reason:
+        reason = 'GMS classified this merchant from the available transaction fields.'
+    return category, f'GMS({GMS_MODEL}) classified this merchant: {reason}'
+
+
+def _resolve_unmatched_category_with_gms(
+    row: pd.Series,
+) -> tuple[str, str, bool, bool]:
+    """Resolve an unmatched merchant with keyword-first, direct-GMS-second order.
+
+    Legacy reference:
+    - We previously used hybrid_category_classifier.GMSCategoryClassifier here.
+    - The older teammate demo_app.py also preferred keyword -> GMS -> exclude order.
+    - We now call GMS directly in this file, but keep the old intent documented
+      so weekend debugging can compare the two paths quickly.
+    """
+    merchant_name = str(row['merchant_name'])
     keyword_result = _classify_by_keyword(merchant_name)
     if keyword_result:
         category, reason = keyword_result
         return category, reason, False, True
 
-    decision = None
-    if classifier.ready:
-        decision = classifier.classify(
-            merchant_name=merchant_name,
-            transaction_detail=str(row['transaction_detail']),
-            payment_method=str(row['payment_method']),
-            amount=int(row['amount']),
-        )
-        if decision and decision.category != EXCLUDE_LABEL:
-            reason = (
-                f"LLM({decision.provider}, {decision.confidence:.2f}) "
-                f"classified this merchant: {decision.reason}"
-            )
-            return decision.category, reason, True, False
+    gms_result = _classify_by_gms(row)
+    if gms_result and gms_result[0] != EXCLUDE_LABEL:
+        category, reason = gms_result
+        return category, reason, True, False
 
-    if decision is not None:
-        reason = (
-            f"LLM({decision.provider}, {decision.confidence:.2f}) "
-            f"did not find a reliable category: {decision.reason}"
-        )
-    else:
-        reason = 'No merchant map match and no keyword/GMS match.'
-    return EXCLUDE_LABEL, reason, bool(decision), False
+    if gms_result:
+        return EXCLUDE_LABEL, gms_result[1], True, False
+    return EXCLUDE_LABEL, 'No merchant map match and no keyword/GMS match.', False, False
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
@@ -486,10 +547,9 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     if 'merchant_name_mapped' in labeled.columns:
         labeled = labeled.drop(columns=['merchant_name_mapped'])
 
-    classifier = GMSCategoryClassifier(get_available_categories())
     merchant_map_classified = int(labeled['card_tpbuz_nm_2'].notna().sum())
-    llm_attempted = 0
-    llm_classified = 0
+    gms_attempted = 0
+    gms_classified = 0
     keyword_classified = 0
 
     # We retry two kinds of rows:
@@ -500,11 +560,11 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     if unresolved_mask.any():
         unresolved = labeled.loc[unresolved_mask].copy()
         for idx, row in unresolved.iterrows():
-            category, reason, llm_used, keyword_used = _resolve_unmatched_category(row, classifier)
-            if llm_used:
-                llm_attempted += 1
+            category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
+            if gms_used:
+                gms_attempted += 1
                 if category != EXCLUDE_LABEL:
-                    llm_classified += 1
+                    gms_classified += 1
             if keyword_used:
                 keyword_classified += 1
             labeled.at[idx, 'card_tpbuz_nm_2'] = category
@@ -545,10 +605,10 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
         'total_amount': int(transactions['amount'].sum()),
         'mapping_stats': {
             'merchant_map_classified': merchant_map_classified,
-            'llm_enabled': classifier.ready,
-            'llm_model': classifier.model if classifier.ready else None,
-            'llm_attempted': llm_attempted,
-            'llm_classified': llm_classified,
+            'llm_enabled': bool(GMS_KEY),
+            'llm_model': GMS_MODEL if GMS_KEY else None,
+            'llm_attempted': gms_attempted,
+            'llm_classified': gms_classified,
             'keyword_classified': keyword_classified,
             'excluded_transaction_count': int((labeled['card_tpbuz_nm_2'] == EXCLUDE_LABEL).sum()),
         },
