@@ -544,20 +544,15 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
 def _resolve_unmatched_category_with_gms(
     row: pd.Series,
 ) -> tuple[str, str, bool, bool]:
-    """Resolve an unmatched merchant with keyword-first, direct-GMS-second order.
+    """Resolve an unmatched merchant with direct GMS classification.
 
     Legacy reference:
     - We previously used hybrid_category_classifier.GMSCategoryClassifier here.
-    - The older teammate demo_app.py also preferred keyword -> GMS -> exclude order.
-    - We now call GMS directly in this file, but keep the old intent documented
-      so weekend debugging can compare the two paths quickly.
+    - We also previously tried keyword -> GMS -> exclude order.
+    - The keyword path is intentionally left in this file as legacy reference, but
+      the active upload flow now depends on GMS once a merchant leaves the exact
+      merchant-map branch.
     """
-    merchant_name = str(row['merchant_name'])
-    keyword_result = _classify_by_keyword(merchant_name)
-    if keyword_result:
-        category, reason = keyword_result
-        return category, reason, False, True
-
     gms_result = _classify_by_gms(row)
     if gms_result and gms_result[0] != EXCLUDE_LABEL:
         category, reason = gms_result
@@ -565,7 +560,7 @@ def _resolve_unmatched_category_with_gms(
 
     if gms_result:
         return EXCLUDE_LABEL, gms_result[1], True, False
-    return EXCLUDE_LABEL, 'No merchant map match and no keyword/GMS match.', False, False
+    return EXCLUDE_LABEL, 'No merchant map match and no GMS match.', False, False
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
@@ -577,15 +572,28 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     merchant_map_classified = int(labeled['card_tpbuz_nm_2'].notna().sum())
     gms_attempted = 0
     gms_classified = 0
+    # Kept for backward-compatible response payloads. The active path below no
+    # longer uses keyword classification.
     keyword_classified = 0
     gms_cache: dict[str, tuple[str, str, bool, bool]] = {}
     map_updated = False
 
-    # We retry two kinds of rows:
+    # Active retry policy:
     # 1) no merchant-map match at all
     # 2) merchant map said "exclude", but the merchant does not look financial
-    #    (this protects us from polluted exclude rows in merchant_category_map.csv).
-    unresolved_mask = labeled['card_tpbuz_nm_2'].isna() | labeled.apply(_should_retry_excluded_map, axis=1)
+    # 3) legacy keyword-repaired exclude rows from older map files
+    #    should also be re-sent to GMS so the active flow stays:
+    #    merchant map -> 100% GMS -> exclude
+    legacy_keyword_repair_mask = labeled['classification_reason'].fillna('').astype(str).str.contains(
+        'exclude merchant map',
+        case=False,
+        na=False,
+    )
+    unresolved_mask = (
+        labeled['card_tpbuz_nm_2'].isna()
+        | labeled.apply(_should_retry_excluded_map, axis=1)
+        | legacy_keyword_repair_mask
+    )
     if unresolved_mask.any():
         unresolved = labeled.loc[unresolved_mask].copy()
         for idx, row in unresolved.iterrows():
@@ -642,7 +650,7 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
 
     labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
     labeled['classification_reason'] = labeled['classification_reason'].fillna(
-        'No merchant map match and no keyword/GMS match.'
+        'No merchant map match and no GMS match.'
     )
 
     if map_updated:
