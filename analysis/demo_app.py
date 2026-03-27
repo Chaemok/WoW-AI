@@ -563,8 +563,29 @@ def _legacy_build_prediction_state_without_llm(transactions: pd.DataFrame) -> di
         .reset_index(drop=True)
     )
 
+    items = labeled.copy()
+    items['transaction_date'] = pd.to_datetime(
+        items['transaction_datetime'],
+        errors='coerce',
+    ).dt.strftime('%Y-%m-%d').fillna('')
+    items['status'] = items['card_tpbuz_nm_2'].eq(EXCLUDE_LABEL).map(
+        lambda value: 'needs-category' if value else 'classified'
+    )
+    items = items[
+        [
+            'transaction_date',
+            'merchant_name',
+            'transaction_detail',
+            'amount',
+            'card_tpbuz_nm_2',
+            'classification_reason',
+            'status',
+        ]
+    ].to_dict('records')
+
     return {
         'records': included.to_dict('records'),
+        'items': items,
         'excluded_rows': excluded.to_dict('records'),
         'transaction_count': int(len(transactions)),
         'included_amount': int(included['amt'].sum()) if not included.empty else 0,
