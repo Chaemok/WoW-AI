@@ -38,8 +38,12 @@ GMS_KEY = (
 ).strip()
 GMS_BASE_URL = os.getenv('CATEGORY_LLM_BASE_URL', 'https://gms.ssafy.io/gmsapi/api.openai.com/v1').rstrip('/')
 GMS_MODEL = os.getenv('CATEGORY_LLM_MODEL', 'gpt-5.2')
-GMS_TIMEOUT_SEC = int(os.getenv('CATEGORY_LLM_TIMEOUT_SEC', '20'))
-GMS_MAX_CALLS_PER_UPLOAD = int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '30'))
+# Upload preprocessing must fail fast. Long per-call waits make the whole Excel
+# request block and eventually hit backend timeouts, so we keep the default short.
+GMS_TIMEOUT_SEC = int(os.getenv('CATEGORY_LLM_TIMEOUT_SEC', '8'))
+# Even with caching, too many unique merchants can make one upload spend minutes
+# on GMS. Cap the default budget aggressively and let env opt-in to higher values.
+GMS_MAX_CALLS_PER_UPLOAD = int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '8'))
 OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
