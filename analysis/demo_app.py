@@ -377,7 +377,11 @@ def _classify_by_keyword(merchant_name: str) -> tuple[str, str] | None:
     return None
 
 
-def build_prediction_state(transactions: pd.DataFrame) -> dict:
+# Legacy reference kept for weekend debugging.
+# This was the pre-hybrid flow: merchant_key-based map -> keyword -> exclude.
+# We keep the old implementation under a different name instead of deleting it,
+# so we can compare behavior quickly if the new GMS-assisted path regresses.
+def _legacy_build_prediction_state_without_llm(transactions: pd.DataFrame) -> dict:
     merchant_map = load_merchant_category_map()
     labeled = transactions.merge(merchant_map, on='merchant_key', how='left', suffixes=('', '_mapped'))
     if 'merchant_name_mapped' in labeled.columns:
@@ -430,61 +434,85 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     }
 
 
+def _should_retry_excluded_map(row: pd.Series) -> bool:
+    mapped_category = str(row.get('card_tpbuz_nm_2') or '').strip()
+    if mapped_category != EXCLUDE_LABEL:
+        return False
+    return not _has_financial_exclude_signal(str(row.get('merchant_name') or ''))
+
+
+def _resolve_unmatched_category(
+    row: pd.Series,
+    classifier: GMSCategoryClassifier,
+) -> tuple[str, str, bool, bool]:
+    merchant_name = str(row['merchant_name'])
+
+    # Legacy reference for weekend debugging:
+    # 1) keyword -> 2) direct GMS -> 3) exclude
+    # The older demo_app.py used a very similar order, so we keep that intent here.
+    keyword_result = _classify_by_keyword(merchant_name)
+    if keyword_result:
+        category, reason = keyword_result
+        return category, reason, False, True
+
+    decision = None
+    if classifier.ready:
+        decision = classifier.classify(
+            merchant_name=merchant_name,
+            transaction_detail=str(row['transaction_detail']),
+            payment_method=str(row['payment_method']),
+            amount=int(row['amount']),
+        )
+        if decision and decision.category != EXCLUDE_LABEL:
+            reason = (
+                f"LLM({decision.provider}, {decision.confidence:.2f}) "
+                f"classified this merchant: {decision.reason}"
+            )
+            return decision.category, reason, True, False
+
+    if decision is not None:
+        reason = (
+            f"LLM({decision.provider}, {decision.confidence:.2f}) "
+            f"did not find a reliable category: {decision.reason}"
+        )
+    else:
+        reason = 'No merchant map match and no keyword/GMS match.'
+    return EXCLUDE_LABEL, reason, bool(decision), False
+
+
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
     merchant_map = load_merchant_category_map()
-    labeled = transactions.merge(merchant_map, on='merchant_name', how='left')
+    labeled = transactions.merge(merchant_map, on='merchant_key', how='left', suffixes=('', '_mapped'))
+    if 'merchant_name_mapped' in labeled.columns:
+        labeled = labeled.drop(columns=['merchant_name_mapped'])
+
     classifier = GMSCategoryClassifier(get_available_categories())
     merchant_map_classified = int(labeled['card_tpbuz_nm_2'].notna().sum())
     llm_attempted = 0
     llm_classified = 0
     keyword_classified = 0
 
-    unmatched = labeled['card_tpbuz_nm_2'].isna()
-    if unmatched.any():
-        unresolved = labeled.loc[unmatched].copy()
+    # We retry two kinds of rows:
+    # 1) no merchant-map match at all
+    # 2) merchant map said "exclude", but the merchant does not look financial
+    #    (this protects us from polluted exclude rows in merchant_category_map.csv).
+    unresolved_mask = labeled['card_tpbuz_nm_2'].isna() | labeled.apply(_should_retry_excluded_map, axis=1)
+    if unresolved_mask.any():
+        unresolved = labeled.loc[unresolved_mask].copy()
         for idx, row in unresolved.iterrows():
-            category = None
-            reason = None
-            decision = None
-
-            if classifier.ready:
+            category, reason, llm_used, keyword_used = _resolve_unmatched_category(row, classifier)
+            if llm_used:
                 llm_attempted += 1
-                decision = classifier.classify(
-                    merchant_name=str(row['merchant_name']),
-                    transaction_detail=str(row['transaction_detail']),
-                    payment_method=str(row['payment_method']),
-                    amount=int(row['amount']),
-                )
-                if decision and decision.category != EXCLUDE_LABEL:
-                    category = decision.category
-                    reason = (
-                        f"LLM({decision.provider}, {decision.confidence:.2f}) "
-                        f"classified this merchant: {decision.reason}"
-                    )
+                if category != EXCLUDE_LABEL:
                     llm_classified += 1
-
-            if category is None:
-                keyword_result = _classify_by_keyword(str(row['merchant_name']))
-                if keyword_result:
-                    category, reason = keyword_result
-                    keyword_classified += 1
-
-            if category is None:
-                category = EXCLUDE_LABEL
-                if decision is not None:
-                    reason = (
-                        f"LLM({decision.provider}, {decision.confidence:.2f}) "
-                        f"did not find a reliable category: {decision.reason}"
-                    )
-                else:
-                    reason = 'No merchant map match and no keyword match.'
-
+            if keyword_used:
+                keyword_classified += 1
             labeled.at[idx, 'card_tpbuz_nm_2'] = category
             labeled.at[idx, 'classification_reason'] = reason
 
     labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
     labeled['classification_reason'] = labeled['classification_reason'].fillna(
-        'No merchant map match and no keyword match.'
+        'No merchant map match and no keyword/GMS match.'
     )
 
     included = (
