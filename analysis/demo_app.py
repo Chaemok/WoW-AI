@@ -39,6 +39,7 @@ GMS_KEY = (
 GMS_BASE_URL = os.getenv('CATEGORY_LLM_BASE_URL', 'https://gms.ssafy.io/gmsapi/api.openai.com/v1').rstrip('/')
 GMS_MODEL = os.getenv('CATEGORY_LLM_MODEL', 'gpt-5.2')
 GMS_TIMEOUT_SEC = int(os.getenv('CATEGORY_LLM_TIMEOUT_SEC', '20'))
+GMS_MAX_CALLS_PER_UPLOAD = int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '30'))
 OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
@@ -323,6 +324,20 @@ def load_merchant_category_map() -> pd.DataFrame:
     return merged.drop_duplicates(subset=['merchant_key'], keep='last').reset_index(drop=True)
 
 
+def save_merchant_category_map(merchant_df: pd.DataFrame) -> None:
+    """Persist the current merchant classification map for the next upload.
+
+    Successful keyword/GMS decisions should become cheap exact matches later,
+    otherwise the same merchant keeps paying the network cost on every upload.
+    """
+    export_columns = ['merchant_name', 'card_tpbuz_nm_2', 'classification_reason']
+    writable = merchant_df.copy()
+    for column in export_columns:
+        if column not in writable.columns:
+            writable[column] = ''
+    writable[export_columns].to_csv(MERCHANT_MAP_PATH, index=False, encoding='utf-8-sig')
+
+
 def save_user_overrides(rows: list[dict]) -> pd.DataFrame:
     categories = set(get_override_categories())
     cleaned_rows = []
@@ -560,6 +575,7 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     gms_classified = 0
     keyword_classified = 0
     gms_cache: dict[str, tuple[str, str, bool, bool]] = {}
+    map_updated = False
 
     # We retry two kinds of rows:
     # 1) no merchant-map match at all
@@ -575,7 +591,18 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
                 category, reason, gms_used, keyword_used = gms_cache[merchant_cache_key]
                 resolved_from_cache = True
             else:
-                category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
+                if gms_attempted >= GMS_MAX_CALLS_PER_UPLOAD:
+                    category, reason, gms_used, keyword_used = (
+                        EXCLUDE_LABEL,
+                        (
+                            f'GMS call budget exhausted for this upload '
+                            f'({GMS_MAX_CALLS_PER_UPLOAD}).'
+                        ),
+                        False,
+                        False,
+                    )
+                else:
+                    category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
                 if merchant_cache_key:
                     gms_cache[merchant_cache_key] = (category, reason, gms_used, keyword_used)
             if gms_used and not resolved_from_cache:
@@ -587,10 +614,35 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
             labeled.at[idx, 'card_tpbuz_nm_2'] = category
             labeled.at[idx, 'classification_reason'] = reason
 
+            # Promote successful classifications into the merchant map so the same
+            # merchant does not hit GMS again on the next upload.
+            if category != EXCLUDE_LABEL and not resolved_from_cache and merchant_cache_key:
+                merchant_map = merchant_map.loc[merchant_map['merchant_key'] != merchant_cache_key].copy()
+                merchant_map = pd.concat(
+                    [
+                        merchant_map,
+                        pd.DataFrame(
+                            [
+                                {
+                                    'merchant_name': str(row['merchant_name']),
+                                    'merchant_key': merchant_cache_key,
+                                    'card_tpbuz_nm_2': category,
+                                    'classification_reason': reason,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+                map_updated = True
+
     labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
     labeled['classification_reason'] = labeled['classification_reason'].fillna(
         'No merchant map match and no keyword/GMS match.'
     )
+
+    if map_updated:
+        save_merchant_category_map(merchant_map)
 
     included = (
         labeled[labeled['card_tpbuz_nm_2'] != EXCLUDE_LABEL]
@@ -627,6 +679,7 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
             'llm_attempted': gms_attempted,
             'llm_classified': gms_classified,
             'keyword_classified': keyword_classified,
+            'gms_budget': GMS_MAX_CALLS_PER_UPLOAD,
             'excluded_transaction_count': int((labeled['card_tpbuz_nm_2'] == EXCLUDE_LABEL).sum()),
         },
     }
