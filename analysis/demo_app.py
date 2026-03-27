@@ -468,13 +468,16 @@ def _map_kakao_category_to_internal(group_code: str, category_name: str) -> str 
 
 def _classify_by_kakao_local(row: pd.Series) -> tuple[str, str] | None:
     if not KAKAO_REST_API_KEY:
+        print('[KAKAO] skipped: missing REST API key')
         return None
 
     merchant_name = str(row.get('merchant_name') or '').strip()
     if not merchant_name:
+        print('[KAKAO] skipped: empty merchant_name')
         return None
 
     try:
+        print(f'[KAKAO] request merchant={merchant_name}')
         response = http_requests.get(
             f'{KAKAO_LOCAL_BASE_URL}/keyword.json',
             headers={'Authorization': f'KakaoAK {KAKAO_REST_API_KEY}'},
@@ -483,7 +486,9 @@ def _classify_by_kakao_local(row: pd.Series) -> tuple[str, str] | None:
         )
         response.raise_for_status()
         documents = (response.json() or {}).get('documents') or []
-    except Exception:
+        print(f'[KAKAO] response merchant={merchant_name} documents={len(documents)}')
+    except Exception as exc:
+        print(f'[KAKAO] error merchant={merchant_name} error={exc}')
         return None
 
     for document in documents:
@@ -496,11 +501,16 @@ def _classify_by_kakao_local(row: pd.Series) -> tuple[str, str] | None:
 
         place_name = str(document.get('place_name') or '').strip()
         category_name = str(document.get('category_name') or '').strip()
+        print(
+            f'[KAKAO] matched merchant={merchant_name} place={place_name or merchant_name} '
+            f'category={category_name} internal={category}'
+        )
         return (
             category,
             f'Kakao Local API matched "{place_name or merchant_name}" with category "{category_name}".',
         )
 
+    print(f'[KAKAO] no-usable-match merchant={merchant_name}')
     return None
 
 
@@ -570,9 +580,11 @@ def _should_retry_excluded_map(row: pd.Series) -> bool:
 
 def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
     if not GMS_KEY:
+        print('[GMS] skipped: missing key')
         return None
 
     allowed_categories = list(get_available_categories())
+    merchant_name = str(row.get('merchant_name') or '').strip()
     request_body = {
         'model': GMS_MODEL,
         'temperature': 0,
@@ -603,6 +615,7 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
     last_error = None
     for attempt in range(2):
         try:
+            print(f'[GMS] request merchant={merchant_name} attempt={attempt + 1}')
             response = http_requests.post(
                 f'{GMS_BASE_URL}/chat/completions',
                 headers={
@@ -616,9 +629,11 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
             data = response.json()
             content = data['choices'][0]['message']['content']
             parsed = json.loads(content)
+            print(f'[GMS] response merchant={merchant_name} content={content}')
             break
         except Exception as exc:
             last_error = exc
+            print(f'[GMS] error merchant={merchant_name} attempt={attempt + 1} error={exc}')
             if attempt == 0:
                 time.sleep(1)
                 continue
@@ -627,9 +642,11 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
     category = str(parsed.get('category') or '').strip()
     reason = str(parsed.get('reason') or '').strip()
     if category not in allowed_categories and category != EXCLUDE_LABEL:
+        print(f'[GMS] invalid-category merchant={merchant_name} category={category}')
         return None
     if not reason:
         reason = 'GMS classified this merchant from the available transaction fields.'
+    print(f'[GMS] matched merchant={merchant_name} category={category}')
     return category, f'GMS({GMS_MODEL}) classified this merchant: {reason}'
 
 
