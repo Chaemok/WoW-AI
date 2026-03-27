@@ -54,6 +54,8 @@ GMS_MAX_CALLS_PER_UPLOAD = int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '8
 OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
+TEMP_FALLBACK_CATEGORY = '수리서비스'
+TEMP_FALLBACK_REASON = 'Temporary fallback classification: manual review recommended.'
 
 # 가맹점명 키워드 → 카테고리 자동 분류 규칙 (맵에 없는 신규 가맹점에 적용)
 # 순서대로 매칭 시도하며 첫 번째로 맞는 규칙 적용
@@ -673,8 +675,12 @@ def _resolve_unmatched_category_with_gms(
         return category, reason, True, False, False
 
     if gms_result:
-        return EXCLUDE_LABEL, gms_result[1], True, False, False
-    return EXCLUDE_LABEL, 'No merchant map match and no Kakao/GMS match.', False, False, False
+        return TEMP_FALLBACK_CATEGORY, TEMP_FALLBACK_REASON, True, False, False
+    return TEMP_FALLBACK_CATEGORY, TEMP_FALLBACK_REASON, False, False, False
+
+
+def _is_temporary_fallback(category: str, reason: str) -> bool:
+    return category == TEMP_FALLBACK_CATEGORY and reason == TEMP_FALLBACK_REASON
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
@@ -736,11 +742,11 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
                     gms_cache[merchant_cache_key] = (category, reason, gms_used, kakao_used, keyword_used)
             if kakao_used and not resolved_from_cache:
                 kakao_attempted += 1
-                if category != EXCLUDE_LABEL:
+                if category != EXCLUDE_LABEL and not _is_temporary_fallback(category, reason):
                     kakao_classified += 1
             if gms_used and not resolved_from_cache:
                 gms_attempted += 1
-                if category != EXCLUDE_LABEL:
+                if category != EXCLUDE_LABEL and not _is_temporary_fallback(category, reason):
                     gms_classified += 1
             if keyword_used and not resolved_from_cache:
                 keyword_classified += 1
@@ -749,7 +755,12 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
 
             # Promote successful classifications into the merchant map so the same
             # merchant does not hit GMS again on the next upload.
-            if category != EXCLUDE_LABEL and not resolved_from_cache and merchant_cache_key:
+            if (
+                category != EXCLUDE_LABEL
+                and not _is_temporary_fallback(category, reason)
+                and not resolved_from_cache
+                and merchant_cache_key
+            ):
                 merchant_map = merchant_map.loc[merchant_map['merchant_key'] != merchant_cache_key].copy()
                 merchant_map = pd.concat(
                     [
@@ -769,9 +780,9 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
                 )
                 map_updated = True
 
-    labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
+    labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(TEMP_FALLBACK_CATEGORY)
     labeled['classification_reason'] = labeled['classification_reason'].fillna(
-        'No merchant map match and no GMS match.'
+        TEMP_FALLBACK_REASON
     )
 
     if map_updated:
