@@ -6,21 +6,21 @@ import io
 import sys
 from pathlib import Path
 
-import pandas as pd
-from flask import Flask, jsonify, render_template, request
-
 import os
 import requests as http_requests
+import pandas as pd
+from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
-
-GMM_KEY = os.getenv("GMS_KEY")
-print(f"[DEBUG] GMM_KEY 로드: {bool(GMM_KEY)}")  # 확인용
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+load_dotenv(dotenv_path=PROJECT_ROOT / '.env')
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
+
+GMM_KEY = os.getenv("GMS_KEY")
+print(f"[DEBUG] GMM_KEY 로드: {bool(GMM_KEY)}")  # 확인용
 
 from cluster_definitions import FINAL_CLUSTER_DEFINITIONS, FINAL_CLUSTER_LABELS  # noqa: E402
 from gmm_predict import get_available_categories, predict_spending_type  # noqa: E402
