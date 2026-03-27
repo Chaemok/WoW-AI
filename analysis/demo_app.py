@@ -419,8 +419,26 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
         .reset_index(drop=True)
     )
 
+    items = labeled.assign(
+        transaction_date=labeled['transaction_datetime'].dt.strftime('%Y-%m-%d'),
+        status=labeled['card_tpbuz_nm_2'].eq(EXCLUDE_LABEL).map(
+            {True: 'needs-category', False: 'classified'}
+        ),
+    )[
+        [
+            'transaction_date',
+            'merchant_name',
+            'transaction_detail',
+            'amount',
+            'card_tpbuz_nm_2',
+            'classification_reason',
+            'status',
+        ]
+    ].to_dict('records')
+
     return {
         'records': included.to_dict('records'),
+        'items': items,
         'excluded_rows': excluded.to_dict('records'),
         'transaction_count': int(len(transactions)),
         'included_amount': int(included['amt'].sum()) if not included.empty else 0,
