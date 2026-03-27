@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -488,22 +489,29 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
         'max_tokens': 120,
     }
 
-    try:
-        response = http_requests.post(
-            f'{GMS_BASE_URL}/chat/completions',
-            headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {GMS_KEY}',
-            },
-            json=request_body,
-            timeout=GMS_TIMEOUT_SEC,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data['choices'][0]['message']['content']
-        parsed = json.loads(content)
-    except Exception:
-        return None
+    last_error = None
+    for attempt in range(2):
+        try:
+            response = http_requests.post(
+                f'{GMS_BASE_URL}/chat/completions',
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {GMS_KEY}',
+                },
+                json=request_body,
+                timeout=GMS_TIMEOUT_SEC,
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data['choices'][0]['message']['content']
+            parsed = json.loads(content)
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            return None
 
     category = str(parsed.get('category') or '').strip()
     reason = str(parsed.get('reason') or '').strip()
@@ -551,6 +559,7 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     gms_attempted = 0
     gms_classified = 0
     keyword_classified = 0
+    gms_cache: dict[str, tuple[str, str, bool, bool]] = {}
 
     # We retry two kinds of rows:
     # 1) no merchant-map match at all
@@ -560,12 +569,20 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     if unresolved_mask.any():
         unresolved = labeled.loc[unresolved_mask].copy()
         for idx, row in unresolved.iterrows():
-            category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
-            if gms_used:
+            merchant_cache_key = str(row.get('merchant_key') or '')
+            resolved_from_cache = False
+            if merchant_cache_key and merchant_cache_key in gms_cache:
+                category, reason, gms_used, keyword_used = gms_cache[merchant_cache_key]
+                resolved_from_cache = True
+            else:
+                category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
+                if merchant_cache_key:
+                    gms_cache[merchant_cache_key] = (category, reason, gms_used, keyword_used)
+            if gms_used and not resolved_from_cache:
                 gms_attempted += 1
                 if category != EXCLUDE_LABEL:
                     gms_classified += 1
-            if keyword_used:
+            if keyword_used and not resolved_from_cache:
                 keyword_classified += 1
             labeled.at[idx, 'card_tpbuz_nm_2'] = category
             labeled.at[idx, 'classification_reason'] = reason
