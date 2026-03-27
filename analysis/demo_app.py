@@ -632,7 +632,7 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
             },
         ],
         'response_format': {'type': 'json_object'},
-        'max_tokens': 120,
+        'max_completion_tokens': 120,
     }
 
     last_error = None
