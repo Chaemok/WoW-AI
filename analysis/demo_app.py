@@ -38,9 +38,16 @@ GMS_KEY = (
 ).strip()
 GMS_BASE_URL = os.getenv('CATEGORY_LLM_BASE_URL', 'https://gms.ssafy.io/gmsapi/api.openai.com/v1').rstrip('/')
 GMS_MODEL = os.getenv('CATEGORY_LLM_MODEL', 'gpt-5.2')
+KAKAO_REST_API_KEY = (
+    os.getenv('KAKAO_LOCAL_REST_API_KEY')
+    or os.getenv('KAKAO_REST_API_KEY')
+    or ''
+).strip()
+KAKAO_LOCAL_BASE_URL = os.getenv('KAKAO_LOCAL_BASE_URL', 'https://dapi.kakao.com/v2/local/search').rstrip('/')
 # Upload preprocessing must fail fast. Long per-call waits make the whole Excel
 # request block and eventually hit backend timeouts, so we keep the default short.
 GMS_TIMEOUT_SEC = int(os.getenv('CATEGORY_LLM_TIMEOUT_SEC', '8'))
+KAKAO_TIMEOUT_SEC = int(os.getenv('KAKAO_LOCAL_TIMEOUT_SEC', '5'))
 # Even with caching, too many unique merchants can make one upload spend minutes
 # on GMS. Cap the default budget aggressively and let env opt-in to higher values.
 GMS_MAX_CALLS_PER_UPLOAD = int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '8'))
@@ -82,6 +89,18 @@ KEYWORD_CATEGORY_RULES: list[tuple[str, str]] = [
 # 소비처가 아닌 금융성/이체성 거래는 제외를 유지해야 한다.
 # 다만 merchant map에 잘못 누적된 "제외"가 많아서, 명백한 소비처 키워드가 있는 경우에는
 # 아래 키워드 규칙으로 다시 살려낼 수 있게 한다.
+KAKAO_GROUP_CODE_TO_CATEGORY: dict[str, str] = {
+    'CS2': '편의점',
+    'MT1': '음/식료품소매',
+    'PM9': '의약/의료품',
+    'HP8': '병원/의료',
+    'CE7': '커피/음료',
+    'FD6': '외식',
+    'PK6': '교통서비스',
+    'OL7': '주유소/충전소',
+    'SW8': '지하철',
+}
+
 FINANCIAL_EXCLUDE_KEYWORDS: tuple[str, ...] = (
     '충전',
     '이체',
@@ -412,6 +431,79 @@ def _classify_by_keyword(merchant_name: str) -> tuple[str, str] | None:
     return None
 
 
+def _map_kakao_category_to_internal(group_code: str, category_name: str) -> str | None:
+    mapped = KAKAO_GROUP_CODE_TO_CATEGORY.get(str(group_code or '').strip())
+    if mapped:
+        return mapped
+
+    category_text = str(category_name or '')
+    fallback_rules = [
+        ('커피', '커피/음료'),
+        ('카페', '커피/음료'),
+        ('제과', '제과/제빵/떡/케익'),
+        ('베이커리', '제과/제빵/떡/케익'),
+        ('패스트푸드', '패스트푸드'),
+        ('분식', '분식'),
+        ('음식점', '외식'),
+        ('한식', '외식'),
+        ('일식', '외식'),
+        ('중식', '외식'),
+        ('양식', '외식'),
+        ('마트', '음/식료품소매'),
+        ('편의점', '음/식료품소매'),
+        ('슈퍼', '음/식료품소매'),
+        ('약국', '의약/의료품'),
+        ('병원', '병원/의료'),
+        ('의원', '병원/의료'),
+        ('주유소', '자동차/유지비'),
+        ('주차', '자동차/유지비'),
+        ('택시', '교통서비스'),
+        ('지하철', '교통서비스'),
+    ]
+    for keyword, internal_category in fallback_rules:
+        if keyword in category_text:
+            return internal_category
+    return None
+
+
+def _classify_by_kakao_local(row: pd.Series) -> tuple[str, str] | None:
+    if not KAKAO_REST_API_KEY:
+        return None
+
+    merchant_name = str(row.get('merchant_name') or '').strip()
+    if not merchant_name:
+        return None
+
+    try:
+        response = http_requests.get(
+            f'{KAKAO_LOCAL_BASE_URL}/keyword.json',
+            headers={'Authorization': f'KakaoAK {KAKAO_REST_API_KEY}'},
+            params={'query': merchant_name, 'size': 5},
+            timeout=KAKAO_TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+        documents = (response.json() or {}).get('documents') or []
+    except Exception:
+        return None
+
+    for document in documents:
+        category = _map_kakao_category_to_internal(
+            str(document.get('category_group_code') or ''),
+            str(document.get('category_name') or ''),
+        )
+        if not category:
+            continue
+
+        place_name = str(document.get('place_name') or '').strip()
+        category_name = str(document.get('category_name') or '').strip()
+        return (
+            category,
+            f'Kakao Local API matched "{place_name or merchant_name}" with category "{category_name}".',
+        )
+
+    return None
+
+
 # Legacy reference kept for weekend debugging.
 # This was the pre-hybrid flow: merchant_key-based map -> keyword -> exclude.
 # We keep the old implementation under a different name instead of deleting it,
@@ -543,24 +635,29 @@ def _classify_by_gms(row: pd.Series) -> tuple[str, str] | None:
 
 def _resolve_unmatched_category_with_gms(
     row: pd.Series,
-) -> tuple[str, str, bool, bool]:
-    """Resolve an unmatched merchant with direct GMS classification.
+) -> tuple[str, str, bool, bool, bool]:
+    """Resolve an unmatched merchant with Kakao-first, GMS-second classification.
 
     Legacy reference:
     - We previously used hybrid_category_classifier.GMSCategoryClassifier here.
     - We also previously tried keyword -> GMS -> exclude order.
     - The keyword path is intentionally left in this file as legacy reference, but
-      the active upload flow now depends on GMS once a merchant leaves the exact
-      merchant-map branch.
+      the active upload flow now depends on Kakao Local API first, then GMS,
+      once a merchant leaves the exact merchant-map branch.
     """
+    kakao_result = _classify_by_kakao_local(row)
+    if kakao_result and kakao_result[0] != EXCLUDE_LABEL:
+        category, reason = kakao_result
+        return category, reason, False, True, False
+
     gms_result = _classify_by_gms(row)
     if gms_result and gms_result[0] != EXCLUDE_LABEL:
         category, reason = gms_result
-        return category, reason, True, False
+        return category, reason, True, False, False
 
     if gms_result:
-        return EXCLUDE_LABEL, gms_result[1], True, False
-    return EXCLUDE_LABEL, 'No merchant map match and no GMS match.', False, False
+        return EXCLUDE_LABEL, gms_result[1], True, False, False
+    return EXCLUDE_LABEL, 'No merchant map match and no Kakao/GMS match.', False, False, False
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
@@ -570,12 +667,14 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
         labeled = labeled.drop(columns=['merchant_name_mapped'])
 
     merchant_map_classified = int(labeled['card_tpbuz_nm_2'].notna().sum())
+    kakao_attempted = 0
+    kakao_classified = 0
     gms_attempted = 0
     gms_classified = 0
     # Kept for backward-compatible response payloads. The active path below no
     # longer uses keyword classification.
     keyword_classified = 0
-    gms_cache: dict[str, tuple[str, str, bool, bool]] = {}
+    gms_cache: dict[str, tuple[str, str, bool, bool, bool]] = {}
     map_updated = False
 
     # Active retry policy:
@@ -600,11 +699,11 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
             merchant_cache_key = str(row.get('merchant_key') or '')
             resolved_from_cache = False
             if merchant_cache_key and merchant_cache_key in gms_cache:
-                category, reason, gms_used, keyword_used = gms_cache[merchant_cache_key]
+                category, reason, gms_used, kakao_used, keyword_used = gms_cache[merchant_cache_key]
                 resolved_from_cache = True
             else:
                 if gms_attempted >= GMS_MAX_CALLS_PER_UPLOAD:
-                    category, reason, gms_used, keyword_used = (
+                    category, reason, gms_used, kakao_used, keyword_used = (
                         EXCLUDE_LABEL,
                         (
                             f'GMS call budget exhausted for this upload '
@@ -612,11 +711,16 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
                         ),
                         False,
                         False,
+                        False,
                     )
                 else:
-                    category, reason, gms_used, keyword_used = _resolve_unmatched_category_with_gms(row)
+                    category, reason, gms_used, kakao_used, keyword_used = _resolve_unmatched_category_with_gms(row)
                 if merchant_cache_key:
-                    gms_cache[merchant_cache_key] = (category, reason, gms_used, keyword_used)
+                    gms_cache[merchant_cache_key] = (category, reason, gms_used, kakao_used, keyword_used)
+            if kakao_used and not resolved_from_cache:
+                kakao_attempted += 1
+                if category != EXCLUDE_LABEL:
+                    kakao_classified += 1
             if gms_used and not resolved_from_cache:
                 gms_attempted += 1
                 if category != EXCLUDE_LABEL:
@@ -686,6 +790,9 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
         'total_amount': int(transactions['amount'].sum()),
         'mapping_stats': {
             'merchant_map_classified': merchant_map_classified,
+            'kakao_enabled': bool(KAKAO_REST_API_KEY),
+            'kakao_attempted': kakao_attempted,
+            'kakao_classified': kakao_classified,
             'llm_enabled': bool(GMS_KEY),
             'llm_model': GMS_MODEL if GMS_KEY else None,
             'llm_attempted': gms_attempted,
