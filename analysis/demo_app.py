@@ -417,16 +417,18 @@ def _resolve_unmatched_merchants(unmatched_rows: pd.DataFrame) -> dict[str, tupl
                     resolutions[merchant_name] = (llm_match.category, reason)
                     continue
 
-                single_match = _classify_by_gms(
-                    classifier,
-                    merchant_name=merchant_name,
-                    transaction_detail=row['transaction_detail'],
-                    payment_method=row['payment_method'],
-                    amount=row['amount'],
-                )
-                if single_match:
-                    resolutions[merchant_name] = single_match
-                    continue
+                if llm_calls_used < CATEGORY_LLM_MAX_CALLS_PER_UPLOAD:
+                    llm_calls_used += 1
+                    single_match = _classify_by_gms(
+                        classifier,
+                        merchant_name=merchant_name,
+                        transaction_detail=row['transaction_detail'],
+                        payment_method=row['payment_method'],
+                        amount=row['amount'],
+                    )
+                    if single_match:
+                        resolutions[merchant_name] = single_match
+                        continue
 
                 resolutions[merchant_name] = (EXCLUDE_LABEL, CATEGORY_FALLBACK_REASON)
 
