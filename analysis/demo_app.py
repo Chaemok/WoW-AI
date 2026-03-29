@@ -37,6 +37,10 @@ CATEGORY_LLM_MAX_CALLS_PER_UPLOAD = max(
     0,
     int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '8')),
 )
+CATEGORY_LLM_BATCH_SIZE = max(
+    1,
+    int(os.getenv('CATEGORY_LLM_BATCH_SIZE', '12')),
+)
 CATEGORY_FALLBACK_REASON = '분류 맵에 없는 merchant_name 입니다.'
 CATEGORY_LLM_LIMIT_REASON = '업로드당 자동 분류 호출 상한을 초과해 제외 처리했습니다.'
 
@@ -374,6 +378,7 @@ def _resolve_unmatched_merchants(unmatched_rows: pd.DataFrame) -> dict[str, tupl
 
     resolutions: dict[str, tuple[str, str]] = {}
     llm_calls_used = 0
+    llm_candidates: list[dict] = []
 
     for row in candidate_rows.itertuples(index=False):
         keyword_match = _classify_by_keyword(row.merchant_name)
@@ -381,31 +386,58 @@ def _resolve_unmatched_merchants(unmatched_rows: pd.DataFrame) -> dict[str, tupl
             resolutions[row.merchant_name] = keyword_match
             continue
 
-        if classifier.ready and llm_calls_used < CATEGORY_LLM_MAX_CALLS_PER_UPLOAD:
-            llm_calls_used += 1
-            llm_match = _classify_by_gms(
-                classifier,
-                merchant_name=row.merchant_name,
-                transaction_detail=row.transaction_detail,
-                payment_method=row.payment_method,
-                amount=row.amount,
+        if classifier.ready:
+            llm_candidates.append(
+                {
+                    'merchant_name': row.merchant_name,
+                    'transaction_detail': row.transaction_detail,
+                    'payment_method': row.payment_method,
+                    'amount': row.amount,
+                }
             )
-            if llm_match:
-                resolutions[row.merchant_name] = llm_match
-                continue
-        elif classifier.ready:
-            resolutions[row.merchant_name] = (EXCLUDE_LABEL, CATEGORY_LLM_LIMIT_REASON)
             continue
 
         resolutions[row.merchant_name] = (EXCLUDE_LABEL, CATEGORY_FALLBACK_REASON)
 
+    if classifier.ready and llm_candidates:
+        for start in range(0, len(llm_candidates), CATEGORY_LLM_BATCH_SIZE):
+            chunk = llm_candidates[start:start + CATEGORY_LLM_BATCH_SIZE]
+            if llm_calls_used >= CATEGORY_LLM_MAX_CALLS_PER_UPLOAD:
+                for row in chunk:
+                    resolutions[row['merchant_name']] = (EXCLUDE_LABEL, CATEGORY_LLM_LIMIT_REASON)
+                continue
+
+            llm_calls_used += 1
+            llm_matches = classifier.classify_many(chunk)
+            for row in chunk:
+                merchant_name = row['merchant_name']
+                llm_match = llm_matches.get(merchant_name)
+                if llm_match:
+                    reason = llm_match.reason.strip() or 'GMS AI 자동 분류'
+                    resolutions[merchant_name] = (llm_match.category, reason)
+                    continue
+
+                single_match = _classify_by_gms(
+                    classifier,
+                    merchant_name=merchant_name,
+                    transaction_detail=row['transaction_detail'],
+                    payment_method=row['payment_method'],
+                    amount=row['amount'],
+                )
+                if single_match:
+                    resolutions[merchant_name] = single_match
+                    continue
+
+                resolutions[merchant_name] = (EXCLUDE_LABEL, CATEGORY_FALLBACK_REASON)
+
     print(
-        '[DEBUG] unmatched_merchants=%s llm_ready=%s llm_calls_used=%s llm_call_limit=%s'
+        '[DEBUG] unmatched_merchants=%s llm_ready=%s llm_calls_used=%s llm_call_limit=%s llm_batch_size=%s'
         % (
             len(candidate_rows),
             classifier.ready,
             llm_calls_used,
             CATEGORY_LLM_MAX_CALLS_PER_UPLOAD,
+            CATEGORY_LLM_BATCH_SIZE,
         )
     )
     return resolutions
