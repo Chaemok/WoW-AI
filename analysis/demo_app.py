@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 import os
-import requests as http_requests
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
@@ -24,6 +23,7 @@ print(f"[DEBUG] GMM_KEY 로드: {bool(GMM_KEY)}")  # 확인용
 
 from cluster_definitions import FINAL_CLUSTER_DEFINITIONS, FINAL_CLUSTER_LABELS  # noqa: E402
 from gmm_predict import get_available_categories, predict_spending_type  # noqa: E402
+from hybrid_category_classifier import GMSCategoryClassifier  # noqa: E402
 from spending_advisor import analyze_and_advise  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -33,6 +33,12 @@ MERCHANT_MAP_PATH = BASE_DIR / 'merchant_category_map.csv'
 OVERRIDE_COLUMNS = ['merchant_name', 'category', 'reason']
 CARD_LIKE_TYPES = {'체크카드', '카드결제', '신한카드'}
 EXCLUDE_LABEL = '제외'
+CATEGORY_LLM_MAX_CALLS_PER_UPLOAD = max(
+    0,
+    int(os.getenv('CATEGORY_LLM_MAX_CALLS_PER_UPLOAD', '8')),
+)
+CATEGORY_FALLBACK_REASON = '분류 맵에 없는 merchant_name 입니다.'
+CATEGORY_LLM_LIMIT_REASON = '업로드당 자동 분류 호출 상한을 초과해 제외 처리했습니다.'
 
 # 가맹점명 키워드 → 카테고리 자동 분류 규칙 (맵에 없는 신규 가맹점에 적용)
 # 순서대로 매칭 시도하며 첫 번째로 맞는 규칙 적용
@@ -314,57 +320,95 @@ def _classify_by_keyword(merchant_name: str) -> tuple[str, str] | None:
     return None
 
 
-def _classify_by_gms(merchant_name: str) -> tuple[str, str] | None:
-    """GMS GPT API로 가맹점 카테고리 분류"""
-    if not GMM_KEY:
-        return None
-
-    VALID_CATEGORIES = [
-        "인터넷쇼핑", "인테리어/가정용품", "교통서비스", "음/식료품소매",
-        "외식", "제과/제빵/떡/케익", "커피/음료", "패스트푸드",
-        "자동차/유지비", "시스템/통신", "건강/기호식품", "분식",
-        "육류/회식", "선물/완구", "병원/의료", "화장품소매",
-        "공연관람", "의약/의료품", "건강/뷰티/마사지", "수리서비스",
+def _build_category_classifier() -> GMSCategoryClassifier:
+    allowed_categories = [
+        category for category in get_available_categories() if category != EXCLUDE_LABEL
     ]
+    return GMSCategoryClassifier(allowed_categories)
 
-    try:
-        response = http_requests.post(
-            "https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {GMM_KEY}",
-            },
-            json={
-                "model": "gpt-5.2",
-                "messages": [
-                    {
-                        "role": "developer",
-                        "content": f"다음 가맹점명을 아래 카테고리 중 하나로만 분류해. 카테고리명만 정확히 답해. 다른 말 하지 마.\n카테고리: {', '.join(VALID_CATEGORIES)}"
-                    },
-                    {
-                        "role": "user",
-                        "content": merchant_name
-                    }
-                ],
-                "max_completion_tokens": 30,
-                "temperature": 0,
-            },
-            timeout=10,
+
+def _classify_by_gms(
+    classifier: GMSCategoryClassifier,
+    *,
+    merchant_name: str,
+    transaction_detail: str,
+    payment_method: str,
+    amount: int,
+) -> tuple[str, str] | None:
+    """Configured GMS classifier wrapper that returns the demo app's response tuple."""
+    if not classifier.ready:
+        return None
+
+    decision = classifier.classify(
+        merchant_name=merchant_name,
+        transaction_detail=transaction_detail,
+        payment_method=payment_method,
+        amount=amount,
+    )
+    if not decision:
+        return None
+
+    reason = decision.reason.strip() or 'GMS AI 자동 분류'
+    return decision.category, reason
+
+
+def _resolve_unmatched_merchants(unmatched_rows: pd.DataFrame) -> dict[str, tuple[str, str]]:
+    """Resolve each unseen merchant once to avoid repeated external calls per upload."""
+    classifier = _build_category_classifier()
+    candidate_rows = unmatched_rows[[
+        'merchant_name',
+        'transaction_detail',
+        'payment_method',
+        'amount',
+    ]].copy()
+    candidate_rows['merchant_name'] = candidate_rows['merchant_name'].fillna('').astype(str).str.strip()
+    candidate_rows['transaction_detail'] = (
+        candidate_rows['transaction_detail'].fillna('').astype(str).str.strip()
+    )
+    candidate_rows['payment_method'] = candidate_rows['payment_method'].fillna('').astype(str).str.strip()
+    candidate_rows['amount'] = pd.to_numeric(candidate_rows['amount'], errors='coerce').fillna(0).astype(int)
+    candidate_rows = candidate_rows.loc[candidate_rows['merchant_name'].ne('')].drop_duplicates(
+        subset=['merchant_name'],
+        keep='first',
+    )
+
+    resolutions: dict[str, tuple[str, str]] = {}
+    llm_calls_used = 0
+
+    for row in candidate_rows.itertuples(index=False):
+        keyword_match = _classify_by_keyword(row.merchant_name)
+        if keyword_match:
+            resolutions[row.merchant_name] = keyword_match
+            continue
+
+        if classifier.ready and llm_calls_used < CATEGORY_LLM_MAX_CALLS_PER_UPLOAD:
+            llm_calls_used += 1
+            llm_match = _classify_by_gms(
+                classifier,
+                merchant_name=row.merchant_name,
+                transaction_detail=row.transaction_detail,
+                payment_method=row.payment_method,
+                amount=row.amount,
+            )
+            if llm_match:
+                resolutions[row.merchant_name] = llm_match
+                continue
+        elif classifier.ready:
+            resolutions[row.merchant_name] = (EXCLUDE_LABEL, CATEGORY_LLM_LIMIT_REASON)
+            continue
+
+        resolutions[row.merchant_name] = (EXCLUDE_LABEL, CATEGORY_FALLBACK_REASON)
+
+    print(
+        '[DEBUG] unmatched_merchants=%s llm_ready=%s llm_calls_used=%s llm_call_limit=%s'
+        % (
+            len(candidate_rows),
+            classifier.ready,
+            llm_calls_used,
+            CATEGORY_LLM_MAX_CALLS_PER_UPLOAD,
         )
-
-        print(f"[GMS] status_code: {response.status_code}")
-        print(f"[GMS] 응답 전체: {response.json()}")  # ← 추가
-
-        data = response.json()
-        category = data["choices"][0]["message"]["content"].strip()
-
-        if category in VALID_CATEGORIES:
-            return category, 'GMS AI 자동 분류'
-        return None
-
-    except Exception as e:
-        print(f"[GMS] 에러: {e}")
-        return None
+    )
+    return resolutions
 
 
 def build_prediction_state(transactions: pd.DataFrame) -> dict:
@@ -372,31 +416,29 @@ def build_prediction_state(transactions: pd.DataFrame) -> dict:
     merchant_map = load_merchant_category_map()
     labeled = transactions.merge(merchant_map, on='merchant_name', how='left')
 
-    # 맵에 없는 가맹점에 키워드 규칙 적용
+    # Resolve unknown merchants once per upload instead of per transaction row.
     unmatched = labeled['card_tpbuz_nm_2'].isna()
     if unmatched.any():
-        def _apply_keyword(row):
-            # 1단계: 키워드 매칭
-            result = _classify_by_keyword(row['merchant_name'])
-            if result:
-                row['card_tpbuz_nm_2'], row['classification_reason'] = result
-                return row
-
-            # 2단계: GMS GPT API 분류
-            gms_result = _classify_by_gms(row['merchant_name'])
-            if gms_result:
-                row['card_tpbuz_nm_2'], row['classification_reason'] = gms_result
-                return row
-
-            # 3단계: 실패 → 제외
-            row['card_tpbuz_nm_2'] = EXCLUDE_LABEL
-            row['classification_reason'] = '분류 맵에 없는 merchant_name 입니다.'
-            return row
-
-        labeled.loc[unmatched] = labeled.loc[unmatched].apply(_apply_keyword, axis=1)
+        merchant_resolutions = _resolve_unmatched_merchants(
+            labeled.loc[unmatched, ['merchant_name', 'transaction_detail', 'payment_method', 'amount']]
+        )
+        resolved_values = (
+            labeled.loc[unmatched, 'merchant_name']
+            .fillna('')
+            .astype(str)
+            .str.strip()
+            .map(
+                lambda merchant_name: merchant_resolutions.get(
+                    merchant_name,
+                    (EXCLUDE_LABEL, CATEGORY_FALLBACK_REASON),
+                )
+            )
+        )
+        labeled.loc[unmatched, 'card_tpbuz_nm_2'] = resolved_values.map(lambda value: value[0])
+        labeled.loc[unmatched, 'classification_reason'] = resolved_values.map(lambda value: value[1])
 
     labeled['card_tpbuz_nm_2'] = labeled['card_tpbuz_nm_2'].fillna(EXCLUDE_LABEL)
-    labeled['classification_reason'] = labeled['classification_reason'].fillna('분류 맵에 없는 merchant_name 입니다.')
+    labeled['classification_reason'] = labeled['classification_reason'].fillna(CATEGORY_FALLBACK_REASON)
 
     included = (
         labeled[labeled['card_tpbuz_nm_2'] != EXCLUDE_LABEL]
