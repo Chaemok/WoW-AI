@@ -108,7 +108,7 @@ def load_model() -> None:
     print("[INFO] 모델 로딩 완료")
 
 
-def generate(history: list[dict], max_new_tokens: int) -> str:
+def generate(history: list[dict], max_new_tokens: int, *, do_sample: bool = False) -> str:
     """Qwen 채팅 템플릿을 사용해 응답을 생성한다."""
     text = tokenizer.apply_chat_template(
         history,
@@ -116,16 +116,31 @@ def generate(history: list[dict], max_new_tokens: int) -> str:
         add_generation_prompt=True,
     )
     inputs = tokenizer(text, return_tensors="pt").to(DEVICE)
+    generation_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "do_sample": do_sample,
+        "repetition_penalty": 1.1,
+        "pad_token_id": tokenizer.eos_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+        "remove_invalid_values": True,
+        "renormalize_logits": True,
+    }
+    if do_sample:
+        generation_kwargs["temperature"] = 0.7
+        generation_kwargs["top_p"] = 0.9
     with torch.no_grad():
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            repetition_penalty=1.1,
-            pad_token_id=tokenizer.eos_token_id,
-        )
+        try:
+            output_ids = model.generate(**inputs, **generation_kwargs)
+        except RuntimeError as exc:
+            if not do_sample or "probability tensor contains either" not in str(exc):
+                raise
+
+            # 샘플링 logits가 불안정해지면 greedy decoding으로 한 번 더 시도한다.
+            fallback_kwargs = dict(generation_kwargs)
+            fallback_kwargs["do_sample"] = False
+            fallback_kwargs.pop("temperature", None)
+            fallback_kwargs.pop("top_p", None)
+            output_ids = model.generate(**inputs, **fallback_kwargs)
 
     input_len = inputs["input_ids"].shape[1]
     generated_ids = output_ids[0][input_len:]
@@ -600,10 +615,42 @@ def _append_assistant_reply(history: list[dict], message: str, keep_session: boo
         history.append({"role": "assistant", "content": message})
 
 
-def _build_report_response(analysis: dict, session_id: str | None) -> dict:
+def _build_fallback_feedback(analysis: dict, reason: str | None = None) -> str:
+    """생성이 실패해도 데모와 백엔드 저장은 이어갈 수 있게 최소 피드백을 만든다."""
+    cluster = analysis["cluster"]
+    overspending = analysis.get("overspending", [])
+    summary = analysis["summary"]
+
+    lines = [
+        f"이번 소비 패턴은 {cluster['name']} 유형으로 분석됐습니다.",
+        f"현재 절감 가능 금액은 약 {summary['totalSavable']:,}원이며, 예상 지출은 {summary['expectedSpending']:,}원입니다.",
+    ]
+
+    if overspending:
+        top_targets = ", ".join(item["name"] for item in overspending[:2])
+        lines.append(f"우선적으로 조정할 항목은 {top_targets}입니다.")
+
+    lines.append("상세 수치 기반 리포트는 정상 생성됐으니, 우선 상위 과소비 항목부터 점검해보세요.")
+
+    if reason:
+        lines.append(f"(자동 생성 피드백 사용: {reason})")
+
+    return " ".join(lines)
+
+
+def _build_report_response(analysis: dict, session_id: str | None, feedback: str) -> dict:
     # /api/analyze는 백엔드가 바로 저장하기 쉬운 리포트 형태만 내려준다.
     response = {
+        "reportVersion": analysis["reportVersion"],
+        "cluster_id": analysis["clusterId"],
+        "cluster_name": analysis["clusterName"],
+        "cluster_description": analysis["clusterDescription"],
+        "clusterId": analysis["clusterId"],
+        "clusterName": analysis["clusterName"],
+        "clusterDescription": analysis["clusterDescription"],
         "cluster": analysis["cluster"],
+        "cluster_stats": analysis["clusterStats"],
+        "clusterStats": analysis["clusterStats"],
         "categories": [
             {
                 "name": item["name"],
@@ -623,6 +670,9 @@ def _build_report_response(analysis: dict, session_id: str | None) -> dict:
             }
             for item in analysis["overspending"]
         ],
+        "feedback": feedback,
+        "reduction_summary": analysis["reductionSummary"],
+        "reductionSummary": analysis["reductionSummary"],
         "summary": {
             "total_savable": analysis["summary"]["totalSavable"],
             "expected_spending": analysis["summary"]["expectedSpending"],
@@ -633,6 +683,12 @@ def _build_report_response(analysis: dict, session_id: str | None) -> dict:
             "expected_spending": analysis["goal"]["expected_spending"],
             "action_tip": analysis["goal"]["action_tip"],
         },
+        "weather": analysis["weather"],
+        "categoryScheme": analysis["categoryScheme"],
+        "source_transaction_count": analysis["sourceTransactionCount"],
+        "source_total_spending": analysis["sourceTotalSpending"],
+        "sourceTransactionCount": analysis["sourceTransactionCount"],
+        "sourceTotalSpending": analysis["sourceTotalSpending"],
     }
 
     # 채팅 세션을 이어붙여야 하는 경우에만 session id를 추가로 내려준다.
@@ -673,12 +729,17 @@ def analyze():
 
     current_session_id, history = _build_history(session_id, bool(keep_session))
     history.append({"role": "user", "content": analysis["prompt"]})
-    feedback = generate(history, max_new_tokens=ANALYZE_MAX_NEW_TOKENS)
+    try:
+        feedback = generate(history, max_new_tokens=ANALYZE_MAX_NEW_TOKENS, do_sample=False)
+    except Exception as exc:
+        app.logger.exception("analyze text generation failed")
+        feedback = _build_fallback_feedback(analysis, str(exc))
     _append_assistant_reply(history, feedback, bool(keep_session))
 
     response = _build_report_response(
         analysis=analysis,
         session_id=current_session_id if bool(keep_session) else None,
+        feedback=feedback,
     )
     return jsonify(response)
 
@@ -695,7 +756,11 @@ def chat():
         sessions[session_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     sessions[session_id].append({"role": "user", "content": message})
-    reply = generate(sessions[session_id], max_new_tokens=CHAT_MAX_NEW_TOKENS)
+    try:
+        reply = generate(sessions[session_id], max_new_tokens=CHAT_MAX_NEW_TOKENS, do_sample=True)
+    except Exception as exc:
+        app.logger.exception("chat text generation failed")
+        return jsonify({"error": f"텍스트 생성 오류: {exc}"}), 500
     sessions[session_id].append({"role": "assistant", "content": reply})
 
     return jsonify(
